@@ -33,6 +33,58 @@ local isRightMouseDown   = false
 local hideMenuKey        = Enum.KeyCode.RightControl
 local targetFOV     = 100
 local defaultFOV    = Camera.FieldOfView
+local espPallet     = false
+local espGenerator  = false
+
+-- ========================
+-- AUTO SAVE / LOAD CONFIG
+-- ========================
+local CONFIG_FILE = "HANGMA_PC_CONFIG.json"
+local Config = {}
+
+local function loadConfig()
+    local ok, data = pcall(function()
+        if isfile and isfile(CONFIG_FILE) then
+            return HttpService:JSONDecode(readfile(CONFIG_FILE))
+        end
+    end)
+    if ok and type(data) == "table" then
+        return data
+    end
+    return {}
+end
+
+local function saveConfig()
+    pcall(function()
+        if writefile then
+            writefile(CONFIG_FILE, HttpService:JSONEncode({
+                espEnabled = espEnabled,
+                espPallet = espPallet,
+                espGenerator = espGenerator,
+                crosshairEnabled = crosshairEnabled,
+                fovEnabled = fovEnabled,
+                skillcheckEnabled = skillcheckEnabled,
+                skillcheckNotPerfectEnabled = skillcheckNotPerfectEnabled,
+                targetFOV = targetFOV,
+            }))
+        end
+    end)
+end
+
+Config = loadConfig()
+espEnabled = Config.espEnabled == true
+crosshairEnabled = Config.crosshairEnabled == true
+fovEnabled = Config.fovEnabled == true
+skillcheckEnabled = Config.skillcheckEnabled == true
+skillcheckNotPerfectEnabled = Config.skillcheckNotPerfectEnabled == true
+targetFOV = tonumber(Config.targetFOV) or 100
+
+-- Object ESP state
+espPallet = Config.espPallet == true
+espGenerator = Config.espGenerator == true
+local objectHighlights = {}
+local generatorBillboards = {}
+local lastObjectESPUpdate = 0
 
 -- ========================
 -- UTILS
@@ -381,15 +433,16 @@ end
 -- SURVIVOR TAB
 -- ========================
 createSection(SurvivorFrame, "SKILLCHECK", 5)
-local updateSkillcheckUI = createToggle(SurvivorFrame, "✓", "Skillcheck Sempurna", 30, false, function(v) skillcheckEnabled = v end)
-local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Gen (Not Perfect)", 78, false, function(v) skillcheckNotPerfectEnabled = v end)
+local updateSkillcheckUI = createToggle(SurvivorFrame, "✓", "Skillcheck Sempurna", 30, skillcheckEnabled, function(v) skillcheckEnabled = v; saveConfig() end)
+local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Gen (Not Perfect)", 78, skillcheckNotPerfectEnabled, function(v) skillcheckNotPerfectEnabled = v; saveConfig() end)
 
 -- ========================
 -- VISUAL TAB
 -- ========================
 createSection(VisualFrame, "ESP", 5)
-local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30, false, function(v)
+local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30, espEnabled, function(v)
     espEnabled = v
+    saveConfig()
     -- Kalau dimatiin, langsung disable semua highlight yang ada
     if not v then
         for _, p in pairs(Players:GetPlayers()) do
@@ -401,12 +454,69 @@ local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30,
     end
 end)
 
-createSection(VisualFrame, "FOV", 85)
-local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", 110, false, function(v) fovEnabled = v end)
-createLabelInput(VisualFrame, "👁", "Target FOV:", "100", 158, function(txt) targetFOV = tonumber(txt) or 100 end)
+local updateESPPalletUI = createToggle(VisualFrame, "🪵", "ESP Pallet", 78, espPallet, function(v)
+    espPallet = v
+    saveConfig()
+    if not v then
+        for obj in pairs(objectHighlights) do
+            if obj and obj.Parent and (obj.Name == "Palletwrong" or obj.Name == "Pallet") then
+                objectHighlights[obj]:Destroy()
+                objectHighlights[obj] = nil
+            end
+        end
+    end
+end)
 
-createSection(VisualFrame, "CROSSHAIR", 213)
-local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", 238, false, function(v) crosshairEnabled = v end)
+local updateESPGeneratorUI = createToggle(VisualFrame, "⚙", "ESP Generator + %", 126, espGenerator, function(v)
+    espGenerator = v
+    saveConfig()
+    if not v then
+        for obj, billboard in pairs(generatorBillboards) do
+            if billboard and billboard.Parent then billboard:Destroy() end
+            generatorBillboards[obj] = nil
+        end
+        for obj, highlight in pairs(objectHighlights) do
+            if obj and obj.Parent and obj.Name == "Generator" then
+                highlight:Destroy()
+                objectHighlights[obj] = nil
+            end
+        end
+    end
+end)
+
+createSection(VisualFrame, "FOV", 185)
+local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", 210, fovEnabled, function(v) fovEnabled = v; saveConfig() end)
+local fovInput = createLabelInput(VisualFrame, "👁", "Target FOV:", tostring(targetFOV), 258, function(txt) targetFOV = tonumber(txt) or 100; saveConfig() end)
+
+createSection(VisualFrame, "CROSSHAIR", 313)
+local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", 338, crosshairEnabled, function(v) crosshairEnabled = v; saveConfig() end)
+
+-- ========================
+-- LAINNYA: AUTO SAVE / RESET
+-- ========================
+createSection(LainnyaFrame, "CONFIGURATION", 5)
+local configStatus = createCard(LainnyaFrame, 30, 42)
+local configStatusLabel = Instance.new("TextLabel")
+configStatusLabel.Parent = configStatus
+configStatusLabel.BackgroundTransparency = 1
+configStatusLabel.Position = UDim2.new(0, 10, 0, 0)
+configStatusLabel.Size = UDim2.new(1, -20, 1, 0)
+configStatusLabel.Font = Enum.Font.Gotham
+configStatusLabel.Text = "Auto Save: AKTIF"
+configStatusLabel.TextColor3 = C.green
+configStatusLabel.TextSize = 12
+configStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local resetConfigCard = createCard(LainnyaFrame, 82, 44)
+local resetConfigButton = Instance.new("TextButton")
+resetConfigButton.Parent = resetConfigCard
+resetConfigButton.BackgroundTransparency = 1
+resetConfigButton.Size = UDim2.new(1, 0, 1, 0)
+resetConfigButton.Font = Enum.Font.GothamBold
+resetConfigButton.Text = "Reset Setting"
+resetConfigButton.TextColor3 = C.red
+resetConfigButton.TextSize = 12
+resetConfigButton.AutoButtonColor = false
 
 -- ========================
 -- CROSSHAIR GUI
@@ -501,6 +611,169 @@ Players.PlayerRemoving:Connect(function(p)
 end)
 
 -- ========================
+-- OBJECT ESP: PALLET + GENERATOR PROGRESS
+-- ========================
+local function getGameValue(obj, names)
+    for _, name in ipairs(names) do
+        local ok, value = pcall(function()
+            local attr = obj:GetAttribute(name)
+            if attr ~= nil then return attr end
+            local child = obj:FindFirstChild(name, true)
+            return child and child.Value or nil
+        end)
+        if ok and value ~= nil then return value end
+    end
+    return nil
+end
+
+local function getGeneratorPercent(generator)
+    local value = getGameValue(generator, {"Progress", "RepairProgress", "GeneratorProgress", "Repair", "Value", "GenValue"})
+    value = tonumber(value)
+    if not value then return nil end
+    -- Dukungan nilai 0..1 maupun 0..100.
+    if value >= 0 and value <= 1 then value = value * 100 end
+    return math.clamp(math.floor(value + 0.5), 0, 100)
+end
+
+local function removeObjectESP(obj)
+    local highlight = objectHighlights[obj]
+    if highlight then pcall(function() highlight:Destroy() end) end
+    objectHighlights[obj] = nil
+    local billboard = generatorBillboards[obj]
+    if billboard then pcall(function() billboard:Destroy() end) end
+    generatorBillboards[obj] = nil
+end
+
+local function applyObjectHighlight(obj, color)
+    if not obj or not obj.Parent then return end
+    local highlight = objectHighlights[obj]
+    if not highlight or not highlight.Parent then
+        highlight = Instance.new("Highlight")
+        highlight.Name = "HANGMA_ObjectESP"
+        highlight.Adornee = obj
+        highlight.FillTransparency = 0.55
+        highlight.OutlineTransparency = 0
+        highlight.Parent = obj
+        objectHighlights[obj] = highlight
+    end
+    highlight.FillColor = color
+    highlight.OutlineColor = color
+    highlight.Enabled = true
+end
+
+local function updateGeneratorBillboard(generator, percent)
+    if not generator or not generator.Parent then return end
+    local billboard = generatorBillboards[generator]
+    if not billboard or not billboard.Parent then
+        local part = generator:IsA("BasePart") and generator or generator:FindFirstChildWhichIsA("BasePart", true)
+        if not part then return end
+        billboard = Instance.new("BillboardGui")
+        billboard.Name = "HANGMA_GeneratorPercent"
+        billboard.AlwaysOnTop = true
+        billboard.Size = UDim2.new(0, 68, 0, 18)
+        billboard.StudsOffset = Vector3.new(0, 3.5, 0)
+        billboard.Adornee = part
+        billboard.Parent = generator
+        local label = Instance.new("TextLabel")
+        label.Name = "Percent"
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.BackgroundTransparency = 1
+        label.Font = Enum.Font.GothamBold
+        label.TextScaled = false
+        label.TextSize = 11
+        label.TextStrokeTransparency = 0
+        label.TextStrokeColor3 = Color3.new(0, 0, 0)
+        label.Parent = billboard
+        generatorBillboards[generator] = billboard
+    end
+    local label = billboard:FindFirstChild("Percent")
+    if label then
+        label.Text = percent and (tostring(percent) .. "%") or "GEN"
+        label.TextColor3 = percent and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(180, 100, 255)
+    end
+end
+
+local function updateObjectESP()
+    local now = tick()
+    if now - lastObjectESPUpdate < 0.25 then return end
+    lastObjectESPUpdate = now
+    local map = Workspace:FindFirstChild("Map")
+    local seenPallets, seenGenerators = {}, {}
+    -- Pallet dapat berada langsung di Workspace atau di dalam Map.
+    if espPallet then
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if (obj:IsA("Model") or obj:IsA("BasePart"))
+                and (obj.Name == "Palletwrong" or obj.Name == "Pallet") then
+                seenPallets[obj] = true
+                applyObjectHighlight(obj, Color3.fromRGB(74, 255, 181))
+            end
+        end
+    end
+    if espGenerator and map then
+        for _, obj in ipairs(map:GetDescendants()) do
+            if obj:IsA("Model") and obj.Name == "Generator" then
+                seenGenerators[obj] = true
+                applyObjectHighlight(obj, Color3.fromRGB(180, 100, 255))
+                updateGeneratorBillboard(obj, getGeneratorPercent(obj))
+            end
+        end
+    end
+    for obj in pairs(objectHighlights) do
+        local keep = (espPallet and seenPallets[obj]) or (espGenerator and seenGenerators[obj])
+        if not keep then removeObjectESP(obj) end
+    end
+    for obj in pairs(generatorBillboards) do
+        if not seenGenerators[obj] then removeObjectESP(obj) end
+    end
+end
+
+-- Reset hanya mengembalikan setting script, tidak mengubah setting game.
+local function resetConfig()
+    espEnabled = false
+    espPallet = false
+    espGenerator = false
+    crosshairEnabled = false
+    fovEnabled = false
+    skillcheckEnabled = false
+    skillcheckNotPerfectEnabled = false
+    targetFOV = 100
+
+    updateESPUI(false)
+    updateESPPalletUI(false)
+    updateESPGeneratorUI(false)
+    updateFOVUI(false)
+    updateCrosshairUI(false)
+    updateSkillcheckUI(false)
+    updateSkillcheckNotPerfectUI(false)
+    fovInput.Text = "100"
+    Camera.FieldOfView = defaultFOV
+
+    for obj, highlight in pairs(objectHighlights) do
+        pcall(function() highlight:Destroy() end)
+        objectHighlights[obj] = nil
+    end
+    for obj, billboard in pairs(generatorBillboards) do
+        pcall(function() billboard:Destroy() end)
+        generatorBillboards[obj] = nil
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            cleanESPHighlight(player.Character)
+        end
+    end
+    saveConfig()
+    configStatusLabel.Text = "Setting di-reset • Auto Save: AKTIF"
+    configStatusLabel.TextColor3 = C.accent
+    task.delay(2, function()
+        if configStatusLabel and configStatusLabel.Parent then
+            configStatusLabel.Text = "Auto Save: AKTIF"
+            configStatusLabel.TextColor3 = C.green
+        end
+    end)
+end
+resetConfigButton.MouseButton1Click:Connect(resetConfig)
+
+-- ========================
 -- PERFECT SKILLCHECK
 -- ========================
 local function doSkillcheck()
@@ -558,6 +831,9 @@ RunService.RenderStepped:Connect(function()
     -- Crosshair Logic
     CrosshairGUI.Visible = crosshairEnabled
 
+    -- ESP object terpisah: pallet dan generator + persen
+    pcall(updateObjectESP)
+
     -- ESP update warna tiap frame (team bisa berubah mid-game)
     if espEnabled then
         for _, p in pairs(Players:GetPlayers()) do
@@ -610,3 +886,5 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 showTab("HOME")
+-- Pastikan konfigurasi yang dimuat langsung tersimpan dalam format terbaru.
+saveConfig()
