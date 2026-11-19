@@ -26,19 +26,15 @@ local isMobile = UserInputService.TouchEnabled and not UserInputService.Keyboard
 -- ========================
 -- STATE
 -- ========================
-local lungeEnabled                = false
 local espEnabled                  = false
 local crosshairEnabled            = false
 local fovEnabled                  = false
 local skillcheckEnabled           = false
 local skillcheckNotPerfectEnabled = false
-local menuVisible                 = true
 
 local isMouseDown      = false
 local isRightMouseDown = false
-local toggleKey        = Enum.KeyCode.P
 local hideMenuKey      = Enum.KeyCode.RightControl
-local lungeSpeed       = 30
 local targetFOV        = 100
 local defaultFOV       = Camera.FieldOfView
 
@@ -53,7 +49,7 @@ local function isKiller(player)
     )
 end
 
-local function isMouseOverFrame(frame)
+local function isOverFrame(frame)
     if not frame.Visible then return false end
     local mouse = UserInputService:GetMouseLocation()
     local pos   = frame.AbsolutePosition
@@ -138,7 +134,7 @@ MainFrame.BorderSizePixel   = 0
 MainFrame.Position          = UDim2.new(0, 10, 0, 10)
 MainFrame.Size              = UDim2.new(0, FRAME_W, 0, FRAME_H)
 MainFrame.Active            = true
-MainFrame.Draggable         = true
+MainFrame.Draggable         = not isMobile
 MainFrame.ClipsDescendants  = true
 addCorner(MainFrame, 12)
 addStroke(MainFrame, C.border, 1.5)
@@ -185,70 +181,81 @@ ContentArea.Position               = UDim2.new(0, SIDE_W, 0, 0)
 ContentArea.Size                   = UDim2.new(1, -SIDE_W, 1, 0)
 
 -- ========================
--- MINIMIZE → FLOATING CIRCLE
+-- MINIMIZE — floating circle
+-- Tombol − di pojok kanan atas, circle muncul saat minimize
+-- Tap circle → expand balik ke posisi circle
 -- ========================
 local minimized = false
 local fullSize  = UDim2.new(0, FRAME_W, 0, FRAME_H)
-local tweenInfo = TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
+-- Circle button (muncul saat minimized)
 local CircleBtn = Instance.new("TextButton")
-CircleBtn.Name                   = "CircleBtn"
-CircleBtn.Parent                 = ScreenGui
-CircleBtn.BackgroundColor3       = C.accentDim
-CircleBtn.Position               = UDim2.new(0, 10, 0, 10)
-CircleBtn.Size                   = UDim2.new(0, 44, 0, 44)
-CircleBtn.Font                   = Enum.Font.GothamBlack
-CircleBtn.Text                   = "H"
-CircleBtn.TextColor3             = C.white
-CircleBtn.TextSize               = 18
-CircleBtn.ZIndex                 = 20
-CircleBtn.AutoButtonColor        = false
-CircleBtn.Visible                = false
-addCorner(CircleBtn, 22)
-addStroke(CircleBtn, C.accent, 1.5)
+CircleBtn.Name             = "CircleBtn"
+CircleBtn.Parent           = ScreenGui
+CircleBtn.BackgroundColor3 = C.accentDim
+CircleBtn.Position         = UDim2.new(0, 10, 0, 10)
+CircleBtn.Size             = UDim2.new(0, 50, 0, 50)
+CircleBtn.Font             = Enum.Font.GothamBlack
+CircleBtn.Text             = "H"
+CircleBtn.TextColor3       = C.white
+CircleBtn.TextSize         = 20
+CircleBtn.ZIndex           = 20
+CircleBtn.AutoButtonColor  = false
+CircleBtn.Visible          = false
+addCorner(CircleBtn, 25)
+addStroke(CircleBtn, C.accent, 2)
 
+-- Drag circle
 do
-    local dragging, dragStart, startPos
-    CircleBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or
-           input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging  = true
-            dragStart = input.Position
-            startPos  = CircleBtn.Position
+    local drag, dstart, dpos
+    local function onInputBegan(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            drag   = true
+            dstart = input.Position
+            dpos   = CircleBtn.Position
         end
-    end)
-    CircleBtn.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or
-           input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
+    end
+    local function onInputEnded(input)
+        if input.UserInputType == Enum.UserInputType.Touch
+        or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            drag = false
         end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (
+    end
+    local function onInputChanged(input)
+        if drag and (
             input.UserInputType == Enum.UserInputType.Touch or
             input.UserInputType == Enum.UserInputType.MouseMovement
         ) then
-            local delta = input.Position - dragStart
+            local delta = input.Position - dstart
             CircleBtn.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                dpos.X.Scale, dpos.X.Offset + delta.X,
+                dpos.Y.Scale, dpos.Y.Offset + delta.Y
             )
         end
-    end)
+    end
+    CircleBtn.InputBegan:Connect(onInputBegan)
+    CircleBtn.InputEnded:Connect(onInputEnded)
+    UserInputService.InputChanged:Connect(onInputChanged)
 end
 
-local function toggleMinimize()
+local function doMinimize()
     minimized = not minimized
     if minimized then
+        -- simpan posisi MainFrame buat posisi circle
         local mpos = MainFrame.Position
         TweenService:Create(MainFrame, tweenInfo, {
             Size = UDim2.new(0, FRAME_W, 0, 0)
         }):Play()
-        task.delay(0.22, function()
+        task.delay(0.2, function()
             if minimized then
                 MainFrame.Visible  = false
-                CircleBtn.Position = UDim2.new(mpos.X.Scale, mpos.X.Offset, mpos.Y.Scale, mpos.Y.Offset)
-                CircleBtn.Visible  = true
+                CircleBtn.Position = UDim2.new(
+                    mpos.X.Scale, mpos.X.Offset,
+                    mpos.Y.Scale, mpos.Y.Offset
+                )
+                CircleBtn.Visible = true
             end
         end)
     else
@@ -261,55 +268,51 @@ local function toggleMinimize()
     end
 end
 
-CircleBtn.MouseButton1Click:Connect(toggleMinimize)
-CircleBtn.TouchTap:Connect(toggleMinimize)
+CircleBtn.MouseButton1Click:Connect(doMinimize)
+CircleBtn.TouchTap:Connect(doMinimize)
 
-local MinimizeBtn = Instance.new("TextButton")
-MinimizeBtn.Name                   = "MinimizeBtn"
-MinimizeBtn.Parent                 = MainFrame
-MinimizeBtn.BackgroundColor3       = C.accentDim
-MinimizeBtn.BackgroundTransparency = 0
-MinimizeBtn.Position               = UDim2.new(1, -38, 0, 4)
-MinimizeBtn.Size                   = UDim2.new(0, 32, 0, 32)
-MinimizeBtn.Font                   = Enum.Font.GothamBold
-MinimizeBtn.Text                   = "−"
-MinimizeBtn.TextColor3             = C.white
-MinimizeBtn.TextSize               = 20
-MinimizeBtn.ZIndex                 = 10
-MinimizeBtn.AutoButtonColor        = false
-addCorner(MinimizeBtn, 16)
-addStroke(MinimizeBtn, C.accent, 1.5)
-MinimizeBtn.MouseButton1Click:Connect(toggleMinimize)
-MinimizeBtn.TouchTap:Connect(toggleMinimize)
+-- Tombol minimize di sudut kanan atas frame — lebih gede, gampang dipencet
+local MinBtn = Instance.new("TextButton")
+MinBtn.Name             = "MinBtn"
+MinBtn.Parent           = MainFrame
+MinBtn.BackgroundColor3 = C.accentDim
+MinBtn.Position         = UDim2.new(1, -44, 0, 6)
+MinBtn.Size             = UDim2.new(0, 36, 0, 36)
+MinBtn.Font             = Enum.Font.GothamBlack
+MinBtn.Text             = "−"
+MinBtn.TextColor3       = C.white
+MinBtn.TextSize         = 22
+MinBtn.ZIndex           = 15
+MinBtn.AutoButtonColor  = false
+addCorner(MinBtn, 18)
+addStroke(MinBtn, C.accent, 1.5)
+MinBtn.MouseButton1Click:Connect(doMinimize)
+MinBtn.TouchTap:Connect(doMinimize)
 
 -- ========================
--- DRAG MAIN FRAME
+-- DRAG MAIN FRAME (mobile manual drag)
 -- ========================
-do
-    local dragging, dragStart, startPos
+if isMobile then
+    local drag, dstart, dpos
     MainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or
-           input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging  = true
-            dragStart = input.Position
-            startPos  = MainFrame.Position
+        if input.UserInputType == Enum.UserInputType.Touch then
+            -- hanya drag kalau touch di area sidebar / header bukan tombol
+            drag   = true
+            dstart = input.Position
+            dpos   = MainFrame.Position
         end
     end)
     MainFrame.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or
-           input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
+        if input.UserInputType == Enum.UserInputType.Touch then
+            drag = false
         end
     end)
     UserInputService.InputChanged:Connect(function(input)
-        if dragging and (
-            input.UserInputType == Enum.UserInputType.Touch or
-            input.UserInputType == Enum.UserInputType.MouseMovement
-        ) then
-            local delta = input.Position - dragStart
+        if drag and input.UserInputType == Enum.UserInputType.Touch then
+            local delta = input.Position - dstart
             MainFrame.Position = UDim2.new(
-                startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                dpos.X.Scale, dpos.X.Offset + delta.X,
+                dpos.Y.Scale, dpos.Y.Offset + delta.Y
             )
         end
     end)
@@ -340,16 +343,12 @@ end
 
 local HomeFrame     = createTabFrame("Home")
 local SurvivorFrame = createTabFrame("Survivor")
-local MovementFrame = createTabFrame("Movement")
 local VisualFrame   = createTabFrame("Visual")
-local LainnyaFrame  = createTabFrame("Lainnya")
 
 local tabs = {
     { name = "HOME",     frame = HomeFrame     },
     { name = "SURVIVOR", frame = SurvivorFrame },
-    { name = "MOVEMENT", frame = MovementFrame },
     { name = "VISUAL",   frame = VisualFrame   },
-    { name = "LAINNYA",  frame = LainnyaFrame  },
 }
 
 local function showTab(name)
@@ -360,13 +359,13 @@ for _, t in pairs(tabs) do
     local btn = Instance.new("TextButton")
     btn.Parent           = TabContainer
     btn.BackgroundColor3 = C.card
-    btn.Size             = UDim2.new(1, 0, 0, isMobile and 42 or 32)
+    btn.Size             = UDim2.new(1, 0, 0, isMobile and 48 or 36)
     btn.Font             = Enum.Font.GothamBold
     btn.Text             = t.name
     btn.TextColor3       = C.subtext
-    btn.TextSize         = isMobile and 9 or 11
+    btn.TextSize         = isMobile and 10 or 11
     btn.AutoButtonColor  = false
-    addCorner(btn, 6)
+    addCorner(btn, 8)
     addStroke(btn, C.border, 1)
     local function onTab()
         showTab(t.name)
@@ -398,32 +397,35 @@ local function createCard(parent, yOffset, height)
     return card
 end
 
+-- Toggle lebih gede hitArea — gampang dipencet mobile
 local function createToggle(parent, icon, text, yOffset, default, callback)
-    local card = createCard(parent, yOffset, TOGGLE_H)
+    local h    = isMobile and 68 or 46
+    local card = createCard(parent, yOffset, h)
 
+    -- seluruh card bisa dipencet
     local hitArea = Instance.new("TextButton")
     hitArea.Parent                 = card
     hitArea.BackgroundTransparency = 1
     hitArea.Size                   = UDim2.new(1, 0, 1, 0)
     hitArea.Text                   = ""
     hitArea.AutoButtonColor        = false
-    hitArea.ZIndex                 = 2
+    hitArea.ZIndex                 = 5
 
     local iconLbl = Instance.new("TextLabel")
     iconLbl.Parent                 = card
     iconLbl.BackgroundTransparency = 1
-    iconLbl.Position               = UDim2.new(0, 8, 0, 0)
-    iconLbl.Size                   = UDim2.new(0, 24, 1, 0)
+    iconLbl.Position               = UDim2.new(0, 10, 0, 0)
+    iconLbl.Size                   = UDim2.new(0, 28, 1, 0)
     iconLbl.Font                   = Enum.Font.GothamBold
     iconLbl.Text                   = icon
     iconLbl.TextColor3             = C.accentDim
-    iconLbl.TextSize               = ICON_SZ
+    iconLbl.TextSize               = ICON_SZ + 2
 
     local label = Instance.new("TextLabel")
     label.Parent                 = card
     label.BackgroundTransparency = 1
-    label.Position               = UDim2.new(0, 36, 0, 0)
-    label.Size                   = UDim2.new(0.48, 0, 1, 0)
+    label.Position               = UDim2.new(0, 42, 0, 0)
+    label.Size                   = UDim2.new(0.5, 0, 1, 0)
     label.Font                   = Enum.Font.Gotham
     label.Text                   = text
     label.TextColor3             = C.text
@@ -433,7 +435,7 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     local switchBg = Instance.new("Frame")
     switchBg.Parent           = card
     switchBg.BackgroundColor3 = default and C.accent or C.off
-    switchBg.Position         = UDim2.new(1, -(TOGGLE_W + 10), 0.5, -(TOGGLE_SH / 2))
+    switchBg.Position         = UDim2.new(1, -(TOGGLE_W + 12), 0.5, -(TOGGLE_SH / 2))
     switchBg.Size             = UDim2.new(0, TOGGLE_W, 0, TOGGLE_SH)
     switchBg.ZIndex           = 3
     addCorner(switchBg, TOGGLE_CR)
@@ -448,24 +450,37 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     knob.ZIndex           = 4
     addCorner(knob, CIRCLE_CR)
 
+    -- status badge di kanan bawah card
+    local badge = Instance.new("TextLabel")
+    badge.Parent                 = card
+    badge.BackgroundTransparency = 1
+    badge.Position               = UDim2.new(1, -(TOGGLE_W + 12), 1, -16)
+    badge.Size                   = UDim2.new(0, TOGGLE_W, 0, 14)
+    badge.Font                   = Enum.Font.GothamBold
+    badge.Text                   = default and "ON" or "OFF"
+    badge.TextColor3             = default and C.accent or C.subtext
+    badge.TextSize               = 9
+    badge.ZIndex                 = 4
+
     local state = default
 
     local function toggle()
         state = not state
         switchBg.BackgroundColor3 = state and C.accent or C.off
+        badge.Text       = state and "ON" or "OFF"
+        badge.TextColor3 = state and C.accent or C.subtext
         knob:TweenPosition(
             state
                 and UDim2.new(1, -(CIRCLE_SZ + 4), 0.5, -(CIRCLE_SZ / 2))
                 or  UDim2.new(0, 4, 0.5, -(CIRCLE_SZ / 2)),
             "Out", "Quad", 0.15, true
         )
+        -- flash border
         local stroke = card:FindFirstChildOfClass("UIStroke")
         if stroke then
             stroke.Color = state and C.accent or C.border
             task.delay(0.3, function()
-                if stroke and stroke.Parent then
-                    stroke.Color = C.border
-                end
+                if stroke and stroke.Parent then stroke.Color = C.border end
             end)
         end
         callback(state)
@@ -474,60 +489,16 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     hitArea.MouseButton1Click:Connect(toggle)
     hitArea.TouchTap:Connect(toggle)
 
+    -- setter external
     return function(v)
         state = v
         switchBg.BackgroundColor3 = state and C.accent or C.off
+        badge.Text       = state and "ON" or "OFF"
+        badge.TextColor3 = state and C.accent or C.subtext
         knob.Position = state
             and UDim2.new(1, -(CIRCLE_SZ + 4), 0.5, -(CIRCLE_SZ / 2))
             or  UDim2.new(0, 4, 0.5, -(CIRCLE_SZ / 2))
     end
-end
-
-local function createKeybindRow(parent, icon, text, currentKey, yOffset, callback)
-    if isMobile then return end
-    local card = createCard(parent, yOffset, 42)
-    local iconLbl = Instance.new("TextLabel")
-    iconLbl.Parent                 = card
-    iconLbl.BackgroundTransparency = 1
-    iconLbl.Position               = UDim2.new(0, 10, 0, 0)
-    iconLbl.Size                   = UDim2.new(0, 24, 1, 0)
-    iconLbl.Font                   = Enum.Font.GothamBold
-    iconLbl.Text                   = icon
-    iconLbl.TextColor3             = C.accentDim
-    iconLbl.TextSize               = 14
-    local label = Instance.new("TextLabel")
-    label.Parent                 = card
-    label.BackgroundTransparency = 1
-    label.Position               = UDim2.new(0, 38, 0, 0)
-    label.Size                   = UDim2.new(0.45, 0, 1, 0)
-    label.Font                   = Enum.Font.Gotham
-    label.Text                   = text
-    label.TextColor3             = C.text
-    label.TextSize               = 13
-    label.TextXAlignment         = Enum.TextXAlignment.Left
-    local bindBtn = Instance.new("TextButton")
-    bindBtn.Parent           = card
-    bindBtn.BackgroundColor3 = C.off
-    bindBtn.Position         = UDim2.new(1, -72, 0.5, -13)
-    bindBtn.Size             = UDim2.new(0, 64, 0, 26)
-    bindBtn.Font             = Enum.Font.GothamBold
-    bindBtn.Text             = currentKey.Name
-    bindBtn.TextColor3       = C.accent
-    bindBtn.TextSize         = 11
-    bindBtn.AutoButtonColor  = false
-    addCorner(bindBtn, 6)
-    addStroke(bindBtn, C.border, 1)
-    bindBtn.MouseButton1Click:Connect(function()
-        bindBtn.Text = "..."
-        local connection
-        connection = UserInputService.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.Keyboard then
-                bindBtn.Text = i.KeyCode.Name
-                callback(i.KeyCode)
-                connection:Disconnect()
-            end
-        end)
-    end)
 end
 
 local function createLabelInput(parent, icon, text, defaultVal, yOffset, callback)
@@ -545,7 +516,7 @@ local function createLabelInput(parent, icon, text, defaultVal, yOffset, callbac
     local input = Instance.new("TextBox")
     input.Parent           = card
     input.BackgroundColor3 = C.off
-    input.Position         = UDim2.new(1, -80, 0.5, -(isMobile and 18 or 13))
+    input.Position         = UDim2.new(1, -84, 0.5, -(isMobile and 18 or 13))
     input.Size             = UDim2.new(0, isMobile and 70 or 64, 0, isMobile and 36 or 26)
     input.Font             = Enum.Font.GothamBold
     input.Text             = defaultVal
@@ -610,7 +581,6 @@ local keybinds = isMobile and {
     { key = "CIRCLE", desc = "Buka / Tutup Menu" },
 } or {
     { key = "R-CTRL", desc = "Sembunyikan / Tampilkan Menu" },
-    { key = "P",      desc = "Toggle Infinite Lunge"       },
 }
 for i, kb in ipairs(keybinds) do
     local kCard = createCard(HomeFrame, 118 + (i-1) * 48, 40)
@@ -642,26 +612,30 @@ end
 -- ========================
 createSection(SurvivorFrame, "SKILLCHECK", 5)
 local updateSkillcheckUI           = createToggle(SurvivorFrame, "✓", "Skillcheck Sempurna",    30,  false, function(v) skillcheckEnabled           = v end)
-local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Gen (Not Perfect)", 102, false, function(v) skillcheckNotPerfectEnabled = v end)
-
--- ========================
--- MOVEMENT TAB
--- ========================
-createSection(MovementFrame, "MOVEMENT", 5)
-local updateLungeUI = createToggle(MovementFrame, "↯", "Lunge Tak Terbatas", 30, false, function(v) lungeEnabled = v end)
-createKeybindRow(MovementFrame, "⌨", "Set Tombol Lunge:", toggleKey, 102, function(key) toggleKey = key end)
-createLabelInput(MovementFrame, "⚡", "Kecepatan Lunge:", "30", isMobile and 102 or 152, function(txt) lungeSpeed = tonumber(txt) or 30 end)
-
-createSection(MovementFrame, "FOV", isMobile and 168 or 206)
-local updateFOVUI = createToggle(MovementFrame, "◎", "Pengubah FOV", isMobile and 196 or 234, false, function(v) fovEnabled = v end)
-createLabelInput(MovementFrame, "👁", "Target FOV:", "100", isMobile and 268 or 286, function(txt) targetFOV = tonumber(txt) or 100 end)
+local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Gen (Not Perfect)", 110, false, function(v) skillcheckNotPerfectEnabled = v end)
 
 -- ========================
 -- VISUAL TAB
 -- ========================
 createSection(VisualFrame, "ESP", 5)
-local updateESPUI       = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30,  false, function(v) espEnabled       = v end)
-local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair",     102, false, function(v) crosshairEnabled = v end)
+local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30, false, function(v)
+    espEnabled = v
+    if not v then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local h = p.Character:FindFirstChild("ESPHighlight")
+                if h then h.Enabled = false end
+            end
+        end
+    end
+end)
+
+createSection(VisualFrame, "FOV", isMobile and 110 or 95)
+local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", isMobile and 138 or 122, false, function(v) fovEnabled = v end)
+createLabelInput(VisualFrame, "👁", "Target FOV:", "100", isMobile and 218 or 180, function(txt) targetFOV = tonumber(txt) or 100 end)
+
+createSection(VisualFrame, "CROSSHAIR", isMobile and 285 or 235)
+local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", isMobile and 312 or 262, false, function(v) crosshairEnabled = v end)
 
 -- ========================
 -- CROSSHAIR GUI
@@ -692,7 +666,7 @@ if isMobile then
 end
 
 -- ========================
--- ESP LOGIC — fixed
+-- ESP LOGIC
 -- ========================
 local function removeESP(character)
     local h = character and character:FindFirstChild("ESPHighlight")
@@ -701,68 +675,44 @@ end
 
 local function applyESP(player, character)
     if not character then return end
-    -- hapus highlight lama kalau ada (respawn safety)
     local old = character:FindFirstChild("ESPHighlight")
     if old then old:Destroy() end
-
-    local highlight            = Instance.new("Highlight")
-    highlight.Name             = "ESPHighlight"
-    highlight.FillTransparency = 0.92
+    local highlight               = Instance.new("Highlight")
+    highlight.Name                = "ESPHighlight"
+    highlight.FillTransparency    = 0.92
     highlight.OutlineTransparency = 0.3
-    highlight.FillColor        = isKiller(player) and C.red or C.green
-    highlight.OutlineColor     = isKiller(player) and C.red or C.green
-    highlight.Enabled          = espEnabled
-    highlight.Parent           = character
+    highlight.FillColor           = isKiller(player) and C.red or C.green
+    highlight.OutlineColor        = isKiller(player) and C.red or C.green
+    highlight.Enabled             = espEnabled
+    highlight.Parent              = character
 end
 
--- pasang highlight saat karakter spawn, bersihkan saat player leave
 local function setupPlayerESP(player)
     if player == LocalPlayer then return end
-
-    -- karakter sudah ada
-    if player.Character then
-        applyESP(player, player.Character)
-    end
-
-    -- karakter spawn baru (respawn)
+    if player.Character then applyESP(player, player.Character) end
     player.CharacterAdded:Connect(function(character)
         applyESP(player, character)
     end)
-
-    -- karakter dihapus (mati/respawn transisi)
     player.CharacterRemoving:Connect(function(character)
         removeESP(character)
     end)
 end
 
--- pasang untuk semua player yang sudah ada
-for _, p in ipairs(Players:GetPlayers()) do
-    setupPlayerESP(p)
-end
-
--- pasang untuk player yang join setelah script jalan
-Players.PlayerAdded:Connect(function(player)
-    setupPlayerESP(player)
-end)
-
--- bersihkan saat player leave
+for _, p in ipairs(Players:GetPlayers()) do setupPlayerESP(p) end
+Players.PlayerAdded:Connect(setupPlayerESP)
 Players.PlayerRemoving:Connect(function(player)
-    if player.Character then
-        removeESP(player.Character)
-    end
+    if player.Character then removeESP(player.Character) end
 end)
 
 -- ========================
--- SKILLCHECK — Space diganti tap tombol sidik jari
+-- SKILLCHECK
 -- ========================
 local function findSkillcheckNodes(root)
     for _, child in ipairs(root:GetDescendants()) do
         if (child:IsA("Frame") or child:IsA("ImageLabel")) and child.Visible then
             local line = child:FindFirstChild("Line")
             local goal = child:FindFirstChild("Goal")
-            if line and goal then
-                return line, goal
-            end
+            if line and goal then return line, goal end
         end
     end
     return nil, nil
@@ -771,67 +721,41 @@ end
 local function pressSkill()
     local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if not PG then return end
-
-    local target = nil
     for _, child in ipairs(PG:GetDescendants()) do
-        if child:IsA("ImageButton")
-        and child.Visible
+        if child:IsA("ImageButton") and child.Visible
         and not child:IsDescendantOf(ScreenGui) then
             local sz = child.AbsoluteSize
             if sz.X >= 60 and sz.X <= 130 and math.abs(sz.X - sz.Y) < 10 then
-                target = child
-                break
+                local pos = child.AbsolutePosition
+                local cx  = pos.X + sz.X / 2
+                local cy  = pos.Y + sz.Y / 2
+                VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true,  game, 1)
+                task.wait(0.01)
+                VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+                return
             end
         end
-    end
-
-    if target then
-        local pos = target.AbsolutePosition
-        local sz  = target.AbsoluteSize
-        local cx  = pos.X + sz.X / 2
-        local cy  = pos.Y + sz.Y / 2
-        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true,  game, 1)
-        task.wait(0.01)
-        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
     end
 end
 
 local function doSkillcheck()
     if not skillcheckEnabled and not skillcheckNotPerfectEnabled then return end
-
     local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if not PG then return end
-
     local line, goal = findSkillcheckNodes(PG)
     if not (line and goal) then return end
-
     local lr = line.Rotation % 360
     local gr = goal.Rotation % 360
-
-    local ZONE_START_OFFSET = 0
-    local ZONE_END_OFFSET   = 10
-
-    local gs = (gr + ZONE_START_OFFSET) % 360
-    local ge = (gr + ZONE_END_OFFSET)   % 360
-
-    local function inArc(angle, arcStart, arcEnd)
-        if arcStart <= arcEnd then
-            return angle >= arcStart and angle <= arcEnd
-        else
-            return angle >= arcStart or angle <= arcEnd
-        end
+    local gs = (gr + 0)  % 360
+    local ge = (gr + 10) % 360
+    local function inArc(a, s, e)
+        if s <= e then return a >= s and a <= e
+        else return a >= s or a <= e end
     end
-
     if skillcheckEnabled then
-        if inArc(lr, gs, ge) then
-            pressSkill()
-        end
+        if inArc(lr, gs, ge) then pressSkill() end
     elseif skillcheckNotPerfectEnabled then
-        local NP_START = (ge + 5)  % 360
-        local NP_END   = (ge + 15) % 360
-        if inArc(lr, NP_START, NP_END) then
-            pressSkill()
-        end
+        if inArc(lr, (ge + 5) % 360, (ge + 15) % 360) then pressSkill() end
     end
 end
 
@@ -839,34 +763,16 @@ end
 -- MAIN LOOP
 -- ========================
 RunService.RenderStepped:Connect(function()
-    if lungeEnabled and isMouseDown and not isMouseOverFrame(MainFrame) then
-        pcall(function()
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local holdingTwist = char:FindFirstChild("Twist of Fate")
-                local isShooting   = holdingTwist and isRightMouseDown
-                if not isShooting then
-                    local hrp  = char.HumanoidRootPart
-                    local look = hrp.CFrame.LookVector
-                    hrp.Velocity = Vector3.new(look.X * lungeSpeed, hrp.Velocity.Y, look.Z * lungeSpeed)
-                end
-            end
-        end)
-    end
-
     pcall(doSkillcheck)
-
     Camera.FieldOfView   = fovEnabled and targetFOV or defaultFOV
     CrosshairGUI.Visible = crosshairEnabled and not isMobile
-
-    -- update warna & enabled state highlight tiap frame
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
-            local highlight = p.Character:FindFirstChild("ESPHighlight")
-            if highlight then
-                highlight.Enabled      = espEnabled
-                highlight.FillColor    = isKiller(p) and C.red or C.green
-                highlight.OutlineColor = isKiller(p) and C.red or C.green
+            local h = p.Character:FindFirstChild("ESPHighlight")
+            if h then
+                h.Enabled      = espEnabled
+                h.FillColor    = isKiller(p) and C.red or C.green
+                h.OutlineColor = isKiller(p) and C.red or C.green
             end
         end
     end
@@ -881,20 +787,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
     elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
         isRightMouseDown = true
     end
-
-    if menuVisible and isMouseOverFrame(MainFrame) then return end
     if processed then return end
-
     if input.KeyCode == hideMenuKey then
-        menuVisible       = not menuVisible
-        MainFrame.Visible = menuVisible
-        UserInputService.MouseIconEnabled = menuVisible
-        UserInputService.MouseBehavior    = menuVisible
-            and Enum.MouseBehavior.Default
-            or  Enum.MouseBehavior.LockCenter
-    elseif input.KeyCode == toggleKey then
-        lungeEnabled = not lungeEnabled
-        updateLungeUI(lungeEnabled)
+        doMinimize()
     end
 end)
 
