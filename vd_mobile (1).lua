@@ -1111,9 +1111,14 @@ function InitializeAutobuy()
                 HeartbeatConnection = RunService.Heartbeat:Connect(function()
                     local lr = line.Rotation % 360
                     local gr = goal.Rotation % 360
-                    local ss = (gr + 101) % 360
-                    local se = (gr + 115) % 360
-                    if (ss > se and (lr >= ss or lr <= se)) or (lr >= ss and lr <= se) then
+                    -- Target diarahkan ke tengah area putih, bukan tepi awalnya.
+                    -- LEAD_DEGREES hanya untuk koreksi kecil: positif = sedikit lebih awal.
+                    local LEAD_DEGREES = 0
+                    local CENTER_OFFSET = 108
+                    local CENTER_TOLERANCE = 3
+                    local centerAngle = (gr + CENTER_OFFSET - LEAD_DEGREES) % 360
+                    local angleDiff = math.abs((lr - centerAngle + 180) % 360 - 180)
+                    if angleDiff <= CENTER_TOLERANCE then
                         TriggerMobileButton()
                         if HeartbeatConnection then
                             HeartbeatConnection:Disconnect(); HeartbeatConnection = nil
