@@ -14,6 +14,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local TweenService        = game:GetService("TweenService")
 local HttpService         = game:GetService("HttpService")
 local ReplicatedStorage   = game:GetService("ReplicatedStorage")
+local GuiService          = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera      = workspace.CurrentCamera
@@ -37,6 +38,13 @@ local isRightMouseDown = false
 local hideMenuKey      = Enum.KeyCode.RightControl
 local targetFOV        = 100
 local defaultFOV       = Camera.FieldOfView
+
+-- skillcheck internal state
+local TouchID            = 8822
+local ActionPath         = "Survivor-mob.Controls.action.check"
+local HeartbeatConnection  = nil
+local VisibilityConnection = nil
+local PlayerGui          = LocalPlayer:WaitForChild("PlayerGui")
 
 -- ========================
 -- UTILS
@@ -182,14 +190,11 @@ ContentArea.Size                   = UDim2.new(1, -SIDE_W, 1, 0)
 
 -- ========================
 -- MINIMIZE — floating circle
--- Tombol − di pojok kanan atas, circle muncul saat minimize
--- Tap circle → expand balik ke posisi circle
 -- ========================
 local minimized = false
 local fullSize  = UDim2.new(0, FRAME_W, 0, FRAME_H)
 local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
--- Circle button (muncul saat minimized)
 local CircleBtn = Instance.new("TextButton")
 CircleBtn.Name             = "CircleBtn"
 CircleBtn.Parent           = ScreenGui
@@ -206,7 +211,6 @@ CircleBtn.Visible          = false
 addCorner(CircleBtn, 25)
 addStroke(CircleBtn, C.accent, 2)
 
--- Drag circle
 do
     local drag, dstart, dpos
     local function onInputBegan(input)
@@ -243,7 +247,6 @@ end
 local function doMinimize()
     minimized = not minimized
     if minimized then
-        -- simpan posisi MainFrame buat posisi circle
         local mpos = MainFrame.Position
         TweenService:Create(MainFrame, tweenInfo, {
             Size = UDim2.new(0, FRAME_W, 0, 0)
@@ -271,7 +274,6 @@ end
 CircleBtn.MouseButton1Click:Connect(doMinimize)
 CircleBtn.TouchTap:Connect(doMinimize)
 
--- Tombol minimize di sudut kanan atas frame — lebih gede, gampang dipencet
 local MinBtn = Instance.new("TextButton")
 MinBtn.Name             = "MinBtn"
 MinBtn.Parent           = MainFrame
@@ -296,7 +298,6 @@ if isMobile then
     local drag, dstart, dpos
     MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch then
-            -- hanya drag kalau touch di area sidebar / header bukan tombol
             drag   = true
             dstart = input.Position
             dpos   = MainFrame.Position
@@ -397,12 +398,10 @@ local function createCard(parent, yOffset, height)
     return card
 end
 
--- Toggle lebih gede hitArea — gampang dipencet mobile
 local function createToggle(parent, icon, text, yOffset, default, callback)
     local h    = isMobile and 68 or 46
     local card = createCard(parent, yOffset, h)
 
-    -- seluruh card bisa dipencet
     local hitArea = Instance.new("TextButton")
     hitArea.Parent                 = card
     hitArea.BackgroundTransparency = 1
@@ -450,7 +449,6 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     knob.ZIndex           = 4
     addCorner(knob, CIRCLE_CR)
 
-    -- status badge di kanan bawah card
     local badge = Instance.new("TextLabel")
     badge.Parent                 = card
     badge.BackgroundTransparency = 1
@@ -475,7 +473,6 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
                 or  UDim2.new(0, 4, 0.5, -(CIRCLE_SZ / 2)),
             "Out", "Quad", 0.15, true
         )
-        -- flash border
         local stroke = card:FindFirstChildOfClass("UIStroke")
         if stroke then
             stroke.Color = state and C.accent or C.border
@@ -489,7 +486,6 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     hitArea.MouseButton1Click:Connect(toggle)
     hitArea.TouchTap:Connect(toggle)
 
-    -- setter external
     return function(v)
         state = v
         switchBg.BackgroundColor3 = state and C.accent or C.off
@@ -705,65 +701,73 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 -- ========================
--- SKILLCHECK
+-- SKILLCHECK — logika dari script paste
+-- WaitForChild SkillCheckPromptGui → listen Visible
+-- zone: ss=(gr+101)%360, se=(gr+115)%360
+-- trigger: TriggerMobileButton (SendTouchEvent ke ActionPath)
+-- disconnect Heartbeat setelah fire, reconnect saat Visible berubah lagi
 -- ========================
-local function findSkillcheckNodes(root)
-    for _, child in ipairs(root:GetDescendants()) do
-        if (child:IsA("Frame") or child:IsA("ImageLabel")) and child.Visible then
-            local line = child:FindFirstChild("Line")
-            local goal = child:FindFirstChild("Goal")
-            if line and goal then return line, goal end
-        end
+local function GetActionTarget()
+    local current = PlayerGui
+    for segment in string.gmatch(ActionPath, "[^%.]+") do
+        current = current and current:FindFirstChild(segment)
     end
-    return nil, nil
+    return current
 end
 
-local function pressSkill()
-    local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not PG then return end
-    for _, child in ipairs(PG:GetDescendants()) do
-        if child:IsA("ImageButton") and child.Visible
-        and not child:IsDescendantOf(ScreenGui) then
-            local sz = child.AbsoluteSize
-            if sz.X >= 60 and sz.X <= 130 and math.abs(sz.X - sz.Y) < 10 then
-                local pos = child.AbsolutePosition
-                local cx  = pos.X + sz.X / 2
-                local cy  = pos.Y + sz.Y / 2
-                VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true,  game, 1)
-                task.wait(0.01)
-                VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
-                return
+local function TriggerMobileButton()
+    local b = GetActionTarget()
+    if b and b:IsA("GuiObject") then
+        local p, s, i = b.AbsolutePosition, b.AbsoluteSize, GuiService:GetGuiInset()
+        local cx = p.X + (s.X / 2) + i.X
+        local cy = p.Y + (s.Y / 2) + i.Y
+        pcall(function()
+            VirtualInputManager:SendTouchEvent(TouchID, 0, cx, cy)
+            task.wait(0.01)
+            VirtualInputManager:SendTouchEvent(TouchID, 2, cx, cy)
+        end)
+    end
+end
+
+local function InitializeAutobuy()
+    task.spawn(function()
+        local prompt = PlayerGui:WaitForChild("SkillCheckPromptGui", 10)
+        local check  = prompt and prompt:WaitForChild("Check", 10)
+        if not check then return end
+        local line = check:WaitForChild("Line")
+        local goal = check:WaitForChild("Goal")
+        if VisibilityConnection then VisibilityConnection:Disconnect() end
+        VisibilityConnection = check:GetPropertyChangedSignal("Visible"):Connect(function()
+            if LocalPlayer.Team
+            and LocalPlayer.Team.Name == "Survivors"
+            and check.Visible
+            and skillcheckEnabled then
+                if HeartbeatConnection then HeartbeatConnection:Disconnect() end
+                HeartbeatConnection = RunService.Heartbeat:Connect(function()
+                    local lr = line.Rotation % 360
+                    local gr = goal.Rotation % 360
+                    local ss = (gr + 101) % 360
+                    local se = (gr + 115) % 360
+                    if (ss > se and (lr >= ss or lr <= se)) or (lr >= ss and lr <= se) then
+                        TriggerMobileButton()
+                        if HeartbeatConnection then
+                            HeartbeatConnection:Disconnect()
+                            HeartbeatConnection = nil
+                        end
+                    end
+                end)
+            elseif HeartbeatConnection then
+                HeartbeatConnection:Disconnect()
+                HeartbeatConnection = nil
             end
-        end
-    end
-end
-
-local function doSkillcheck()
-    if not skillcheckEnabled and not skillcheckNotPerfectEnabled then return end
-    local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not PG then return end
-    local line, goal = findSkillcheckNodes(PG)
-    if not (line and goal) then return end
-    local lr = line.Rotation % 360
-    local gr = goal.Rotation % 360
-    local gs = (gr + 0)  % 360
-    local ge = (gr + 10) % 360
-    local function inArc(a, s, e)
-        if s <= e then return a >= s and a <= e
-        else return a >= s or a <= e end
-    end
-    if skillcheckEnabled then
-        if inArc(lr, gs, ge) then pressSkill() end
-    elseif skillcheckNotPerfectEnabled then
-        if inArc(lr, (ge + 5) % 360, (ge + 15) % 360) then pressSkill() end
-    end
+        end)
+    end)
 end
 
 -- ========================
 -- MAIN LOOP
 -- ========================
 RunService.RenderStepped:Connect(function()
-    pcall(doSkillcheck)
     Camera.FieldOfView   = fovEnabled and targetFOV or defaultFOV
     CrosshairGUI.Visible = crosshairEnabled and not isMobile
     for _, p in ipairs(Players:GetPlayers()) do
@@ -801,4 +805,15 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+-- ========================
+-- INIT
+-- ========================
+LocalPlayer.CharacterAdded:Connect(function()
+    if HeartbeatConnection then HeartbeatConnection:Disconnect() end
+    if VisibilityConnection then VisibilityConnection:Disconnect() end
+    task.wait(1)
+    InitializeAutobuy()
+end)
+
+InitializeAutobuy()
 showTab("HOME")
