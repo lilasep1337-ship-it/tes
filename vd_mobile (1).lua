@@ -705,7 +705,7 @@ local function applyESP(character)
 end
 
 -- ========================
--- SKILLCHECK — tap fingerprint button
+-- SKILLCHECK — Space diganti tap tombol sidik jari
 -- ========================
 local function findSkillcheckNodes(root)
     for _, child in ipairs(root:GetDescendants()) do
@@ -724,15 +724,18 @@ local function pressSkill()
     local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if not PG then return end
 
-    -- Cari ImageButton visible di PlayerGui,
-    -- ukuran bulat kecil (30–120px), bukan bagian dari GUI kita
+    -- Cari ImageButton bulat visible di PlayerGui, bukan milik GUI kita
     local target = nil
     for _, child in ipairs(PG:GetDescendants()) do
-        if child:IsA("ImageButton") and child.Visible
-        and child.AbsoluteSize.X > 30 and child.AbsoluteSize.X < 120
+        if child:IsA("ImageButton")
+        and child.Visible
         and not child:IsDescendantOf(ScreenGui) then
-            target = child
-            break
+            local sz = child.AbsoluteSize
+            -- bulat = X dan Y hampir sama, ukuran 60-130px
+            if sz.X >= 60 and sz.X <= 130 and math.abs(sz.X - sz.Y) < 10 then
+                target = child
+                break
+            end
         end
     end
 
@@ -744,11 +747,6 @@ local function pressSkill()
         VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true,  game, 1)
         task.wait(0.01)
         VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
-    else
-        -- fallback Space kalau button tidak ketemu
-        VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.Space, false, game)
-        task.wait(0.01)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
     end
 end
 
