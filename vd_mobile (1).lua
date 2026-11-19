@@ -692,17 +692,65 @@ if isMobile then
 end
 
 -- ========================
--- ESP LOGIC
+-- ESP LOGIC — fixed
 -- ========================
-local function applyESP(character)
-    if not character:FindFirstChild("ESPHighlight") then
-        local highlight = Instance.new("Highlight")
-        highlight.Name                = "ESPHighlight"
-        highlight.Parent              = character
-        highlight.FillTransparency    = 0.92
-        highlight.OutlineTransparency = 0.3
-    end
+local function removeESP(character)
+    local h = character and character:FindFirstChild("ESPHighlight")
+    if h then h:Destroy() end
 end
+
+local function applyESP(player, character)
+    if not character then return end
+    -- hapus highlight lama kalau ada (respawn safety)
+    local old = character:FindFirstChild("ESPHighlight")
+    if old then old:Destroy() end
+
+    local highlight            = Instance.new("Highlight")
+    highlight.Name             = "ESPHighlight"
+    highlight.FillTransparency = 0.92
+    highlight.OutlineTransparency = 0.3
+    highlight.FillColor        = isKiller(player) and C.red or C.green
+    highlight.OutlineColor     = isKiller(player) and C.red or C.green
+    highlight.Enabled          = espEnabled
+    highlight.Parent           = character
+end
+
+-- pasang highlight saat karakter spawn, bersihkan saat player leave
+local function setupPlayerESP(player)
+    if player == LocalPlayer then return end
+
+    -- karakter sudah ada
+    if player.Character then
+        applyESP(player, player.Character)
+    end
+
+    -- karakter spawn baru (respawn)
+    player.CharacterAdded:Connect(function(character)
+        applyESP(player, character)
+    end)
+
+    -- karakter dihapus (mati/respawn transisi)
+    player.CharacterRemoving:Connect(function(character)
+        removeESP(character)
+    end)
+end
+
+-- pasang untuk semua player yang sudah ada
+for _, p in ipairs(Players:GetPlayers()) do
+    setupPlayerESP(p)
+end
+
+-- pasang untuk player yang join setelah script jalan
+Players.PlayerAdded:Connect(function(player)
+    setupPlayerESP(player)
+end)
+
+-- bersihkan saat player leave
+Players.PlayerRemoving:Connect(function(player)
+    if player.Character then
+        removeESP(player.Character)
+    end
+end)
 
 -- ========================
 -- SKILLCHECK — Space diganti tap tombol sidik jari
@@ -724,14 +772,12 @@ local function pressSkill()
     local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
     if not PG then return end
 
-    -- Cari ImageButton bulat visible di PlayerGui, bukan milik GUI kita
     local target = nil
     for _, child in ipairs(PG:GetDescendants()) do
         if child:IsA("ImageButton")
         and child.Visible
         and not child:IsDescendantOf(ScreenGui) then
             local sz = child.AbsoluteSize
-            -- bulat = X dan Y hampir sama, ukuran 60-130px
             if sz.X >= 60 and sz.X <= 130 and math.abs(sz.X - sz.Y) < 10 then
                 target = child
                 break
@@ -813,15 +859,14 @@ RunService.RenderStepped:Connect(function()
     Camera.FieldOfView   = fovEnabled and targetFOV or defaultFOV
     CrosshairGUI.Visible = crosshairEnabled and not isMobile
 
-    for _, p in pairs(Players:GetPlayers()) do
+    -- update warna & enabled state highlight tiap frame
+    for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local highlight = p.Character:FindFirstChild("ESPHighlight")
             if highlight then
                 highlight.Enabled      = espEnabled
                 highlight.FillColor    = isKiller(p) and C.red or C.green
                 highlight.OutlineColor = isKiller(p) and C.red or C.green
-            else
-                applyESP(p.Character)
             end
         end
     end
