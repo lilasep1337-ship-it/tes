@@ -21,7 +21,6 @@ local Camera      = workspace.CurrentCamera
 -- ========================
 -- STATE / VARIABEL
 -- ========================
-local lungeEnabled      = false
 local espEnabled        = false
 local crosshairEnabled  = false
 local fovEnabled        = false
@@ -31,10 +30,7 @@ local menuVisible       = true
 
 local isMouseDown        = false
 local isRightMouseDown   = false
-local toggleKey          = Enum.KeyCode.P
 local hideMenuKey        = Enum.KeyCode.RightControl
-local lungeSpeed    = 30
-local crosshairType = "Dot"
 local targetFOV     = 100
 local defaultFOV    = Camera.FieldOfView
 
@@ -178,14 +174,12 @@ end
 
 local HomeFrame     = createTabFrame("Home")
 local SurvivorFrame = createTabFrame("Survivor")
-local MovementFrame = createTabFrame("Movement")
 local VisualFrame   = createTabFrame("Visual")
 local LainnyaFrame  = createTabFrame("Lainnya")
 
 local tabs = {
     { name = "HOME",     frame = HomeFrame     },
     { name = "SURVIVOR", frame = SurvivorFrame },
-    { name = "MOVEMENT", frame = MovementFrame },
     { name = "VISUAL",   frame = VisualFrame   },
     { name = "LAINNYA",  frame = LainnyaFrame  },
 }
@@ -280,94 +274,6 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     end
 end
 
-local function createKeybindRow(parent, icon, text, currentKey, yOffset, callback)
-    local card = createCard(parent, yOffset, 42)
-    local iconLbl = Instance.new("TextLabel")
-    iconLbl.Parent             = card
-    iconLbl.BackgroundTransparency = 1
-    iconLbl.Position           = UDim2.new(0, 10, 0, 0)
-    iconLbl.Size               = UDim2.new(0, 24, 1, 0)
-    iconLbl.Font               = Enum.Font.GothamBold
-    iconLbl.Text               = icon
-    iconLbl.TextColor3         = C.accentDim
-    iconLbl.TextSize           = 14
-    local label = Instance.new("TextLabel")
-    label.Parent             = card
-    label.BackgroundTransparency = 1
-    label.Position           = UDim2.new(0, 38, 0, 0)
-    label.Size               = UDim2.new(0.45, 0, 1, 0)
-    label.Font               = Enum.Font.Gotham
-    label.Text               = text
-    label.TextColor3         = C.text
-    label.TextSize           = 13
-    label.TextXAlignment     = Enum.TextXAlignment.Left
-    local bindBtn = Instance.new("TextButton")
-    bindBtn.Parent             = card
-    bindBtn.BackgroundColor3   = C.off
-    bindBtn.Position           = UDim2.new(1, -72, 0.5, -13)
-    bindBtn.Size               = UDim2.new(0, 64, 0, 26)
-    bindBtn.Font               = Enum.Font.GothamBold
-    bindBtn.Text               = currentKey.Name
-    bindBtn.TextColor3         = C.accent
-    bindBtn.TextSize           = 11
-    bindBtn.AutoButtonColor    = false
-    addCorner(bindBtn, 6)
-    addStroke(bindBtn, C.border, 1)
-    bindBtn.MouseButton1Click:Connect(function()
-        bindBtn.Text = "..."
-        local connection
-        connection = UserInputService.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.Keyboard then
-                bindBtn.Text = i.KeyCode.Name
-                callback(i.KeyCode)
-                connection:Disconnect()
-            end
-        end)
-    end)
-end
-
-local function createSlider(parent, icon, text, min, max, defaultVal, yOffset, callback)
-    local card = createCard(parent, yOffset, 56)
-    local label = Instance.new("TextLabel")
-    label.Parent             = card
-    label.BackgroundTransparency = 1
-    label.Position           = UDim2.new(0, 10, 0, 5)
-    label.Size               = UDim2.new(1, -20, 0, 20)
-    label.Font               = Enum.Font.Gotham
-    label.Text               = icon .. " " .. text .. " (" .. defaultVal .. ")"
-    label.TextColor3         = C.text
-    label.TextSize           = 12
-    label.TextXAlignment     = Enum.TextXAlignment.Left
-    local sliderBG = Instance.new("Frame")
-    sliderBG.Parent             = card
-    sliderBG.BackgroundColor3   = C.off
-    sliderBG.Position           = UDim2.new(0, 10, 0, 32)
-    sliderBG.Size               = UDim2.new(1, -20, 0, 6)
-    addCorner(sliderBG, 3)
-    local sliderFill = Instance.new("Frame")
-    sliderFill.Parent           = sliderBG
-    sliderFill.BackgroundColor3 = C.accent
-    sliderFill.Size             = UDim2.new((defaultVal - min) / (max - min), 0, 1, 0)
-    addCorner(sliderFill, 3)
-    local isDragging = false
-    local function update(input)
-        local pos = math.clamp((input.Position.X - sliderBG.AbsolutePosition.X) / sliderBG.AbsoluteSize.X, 0, 1)
-        sliderFill.Size = UDim2.new(pos, 0, 1, 0)
-        local val = math.floor(min + (max - min) * pos)
-        label.Text = icon .. " " .. text .. " (" .. val .. ")"
-        callback(val)
-    end
-    sliderBG.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true end
-    end)
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if isDragging and input.UserInputType == Enum.UserInputType.MouseMovement then update(input) end
-    end)
-end
-
 local function createLabelInput(parent, icon, text, defaultVal, yOffset, callback)
     local card = createCard(parent, yOffset, 42)
     local label = Instance.new("TextLabel")
@@ -445,7 +351,6 @@ BannerSub.TextXAlignment     = Enum.TextXAlignment.Left
 createSection(HomeFrame, "KEYBIND DEFAULT", 93)
 local keybinds = {
     { key = "R-CTRL", desc = "Sembunyikan / Tampilkan Menu" },
-    { key = "P",      desc = "Toggle Infinite Lunge"       },
 }
 for i, kb in ipairs(keybinds) do
     local kCard = createCard(HomeFrame, 118 + (i-1) * 48, 40)
@@ -480,23 +385,28 @@ local updateSkillcheckUI = createToggle(SurvivorFrame, "✓", "Skillcheck Sempur
 local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Gen (Not Perfect)", 78, false, function(v) skillcheckNotPerfectEnabled = v end)
 
 -- ========================
--- MOVEMENT
--- ========================
-createSection(MovementFrame, "MOVEMENT", 5)
-local updateLungeUI = createToggle(MovementFrame, "↯", "Lunge Tak Terbatas", 30, false, function(v) lungeEnabled = v end)
-createKeybindRow(MovementFrame, "⌨", "Set Tombol Lunge:", toggleKey, 78, function(key) toggleKey = key end)
-createLabelInput(MovementFrame, "⚡", "Kecepatan Lunge:", "30", 126, function(txt) lungeSpeed = tonumber(txt) or 30 end)
-
-createSection(MovementFrame, "FOV", 178)
-local updateFOVUI = createToggle(MovementFrame, "◎", "Pengubah FOV", 203, false, function(v) fovEnabled = v end)
-createLabelInput(MovementFrame, "👁", "Target FOV:", "100", 251, function(txt) targetFOV = tonumber(txt) or 100 end)
-
--- ========================
 -- VISUAL TAB
 -- ========================
 createSection(VisualFrame, "ESP", 5)
-local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30, false, function(v) espEnabled = v end)
-local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", 78, false, function(v) crosshairEnabled = v end)
+local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30, false, function(v)
+    espEnabled = v
+    -- Kalau dimatiin, langsung disable semua highlight yang ada
+    if not v then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local h = p.Character:FindFirstChild("ESPHighlight")
+                if h then h.Enabled = false end
+            end
+        end
+    end
+end)
+
+createSection(VisualFrame, "FOV", 85)
+local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", 110, false, function(v) fovEnabled = v end)
+createLabelInput(VisualFrame, "👁", "Target FOV:", "100", 158, function(txt) targetFOV = tonumber(txt) or 100 end)
+
+createSection(VisualFrame, "CROSSHAIR", 213)
+local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", 238, false, function(v) crosshairEnabled = v end)
 
 -- ========================
 -- CROSSHAIR GUI
@@ -512,17 +422,83 @@ CrosshairGUI.Visible           = false
 addCorner(CrosshairGUI, 3)
 
 -- ========================
--- ESP LOGIC
+-- ESP LOGIC — Solara-safe
+-- Pakai tabel tracking buat hindari double-instance
+-- dan re-apply otomatis kalau character respawn
 -- ========================
-local function applyESP(character, player)
-    if not character:FindFirstChild("ESPHighlight") then
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "ESPHighlight"
-        highlight.Parent = character
-        highlight.FillTransparency = 0.92
-        highlight.OutlineTransparency = 0.3
+local espConnections = {}
+
+local function cleanESPHighlight(character)
+    -- Hapus semua ESPHighlight lama (jaga-jaga double instance di Solara)
+    for _, obj in pairs(character:GetChildren()) do
+        if obj.Name == "ESPHighlight" then
+            obj:Destroy()
+        end
     end
 end
+
+local function applyESP(player)
+    local character = player.Character
+    if not character then return end
+
+    cleanESPHighlight(character)
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name               = "ESPHighlight"
+    highlight.FillTransparency   = 0.92
+    highlight.OutlineTransparency = 0.3
+    highlight.Enabled            = espEnabled
+    highlight.FillColor          = isKiller(player) and C.red or C.green
+    highlight.OutlineColor       = isKiller(player) and C.red or C.green
+    highlight.Parent             = character
+end
+
+local function setupPlayerESP(player)
+    -- Lepas koneksi lama kalau ada
+    if espConnections[player] then
+        espConnections[player]:Disconnect()
+        espConnections[player] = nil
+    end
+
+    if player.Character then
+        applyESP(player)
+    end
+
+    -- Auto re-apply tiap respawn
+    espConnections[player] = player.CharacterAdded:Connect(function(char)
+        task.wait(0.5) -- tunggu character fully loaded
+        applyESP(player)
+    end)
+end
+
+local function teardownPlayerESP(player)
+    if espConnections[player] then
+        espConnections[player]:Disconnect()
+        espConnections[player] = nil
+    end
+    if player.Character then
+        cleanESPHighlight(player.Character)
+    end
+end
+
+-- Setup ESP untuk semua player yang sudah ada
+for _, p in pairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then
+        setupPlayerESP(p)
+    end
+end
+
+-- Setup ESP untuk player baru masuk
+Players.PlayerAdded:Connect(function(p)
+    if p ~= LocalPlayer then
+        setupPlayerESP(p)
+    end
+end)
+
+-- Bersihkan koneksi kalau player keluar
+Players.PlayerRemoving:Connect(function(p)
+    espConnections[p] = nil
+end)
 
 -- ========================
 -- PERFECT SKILLCHECK
@@ -569,47 +545,32 @@ end
 -- MAIN LOOP
 -- ========================
 RunService.RenderStepped:Connect(function()
-    -- Lunge Logic
-    if lungeEnabled and isMouseDown and not isMouseOverFrame(MainFrame) then
-        pcall(function()
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local holdingTwist = char:FindFirstChild("Twist of Fate")
-                local isShooting   = holdingTwist and isRightMouseDown
-                if not isShooting then
-                    local hrp  = char.HumanoidRootPart
-                    local look = hrp.CFrame.LookVector
-                    hrp.Velocity = Vector3.new(look.X * lungeSpeed, hrp.Velocity.Y, look.Z * lungeSpeed)
-                end
-            end
-        end)
-    end
-
     -- Skillcheck
     pcall(doSkillcheck)
 
     -- FOV Logic
-    if fovEnabled then Camera.FieldOfView = targetFOV else Camera.FieldOfView = defaultFOV end
+    if fovEnabled then
+        Camera.FieldOfView = targetFOV
+    else
+        Camera.FieldOfView = defaultFOV
+    end
 
     -- Crosshair Logic
     CrosshairGUI.Visible = crosshairEnabled
-    if crosshairEnabled then
-        if crosshairType == "Dot" then
-            CrosshairGUI.Size = UDim2.new(0, 6, 0, 6)
-            CrosshairGUI.Position = UDim2.new(0.5, -3, 0.5, -3)
-        end
-    end
 
-    -- ESP Logic
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local highlight = p.Character:FindFirstChild("ESPHighlight")
-            if highlight then
-                highlight.Enabled = espEnabled
-                highlight.FillColor = isKiller(p) and C.red or C.green
-                highlight.OutlineColor = isKiller(p) and C.red or C.green
-            else
-                applyESP(p.Character, p)
+    -- ESP update warna tiap frame (team bisa berubah mid-game)
+    if espEnabled then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local h = p.Character:FindFirstChild("ESPHighlight")
+                if h then
+                    h.Enabled      = true
+                    h.FillColor    = isKiller(p) and C.red or C.green
+                    h.OutlineColor = isKiller(p) and C.red or C.green
+                elseif espEnabled then
+                    -- Highlight hilang (misalnya kena destroy), re-apply
+                    applyESP(p)
+                end
             end
         end
     end
@@ -625,10 +586,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
         isRightMouseDown = true
     end
 
-    if menuVisible and isMouseOverFrame(MainFrame) then
-        return
-    end
-
+    if menuVisible and isMouseOverFrame(MainFrame) then return end
     if processed then return end
 
     if input.KeyCode == hideMenuKey then
@@ -640,9 +598,6 @@ UserInputService.InputBegan:Connect(function(input, processed)
         else
             UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
         end
-    elseif input.KeyCode == toggleKey then
-        lungeEnabled = not lungeEnabled
-        updateLungeUI(lungeEnabled)
     end
 end)
 
