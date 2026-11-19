@@ -267,18 +267,19 @@ local function addGradient(parent, c0, c1, rotation)
     return g
 end
 
-local FRAME_W = isMobile and 300 or 400
-local FRAME_H = isMobile and 480 or 500
-local SIDE_W  = isMobile and 90  or 120
+local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(390, 800)
+local FRAME_W = isMobile and math.min(340, math.max(300, viewport.X - 20)) or 400
+local FRAME_H = isMobile and math.min(520, math.max(440, viewport.Y - 20)) or 500
+local SIDE_W  = isMobile and 100 or 120
 
-local TOGGLE_H  = isMobile and 62  or 42
-local TOGGLE_W  = isMobile and 56  or 44
-local TOGGLE_SH = isMobile and 32  or 26
-local TOGGLE_CR = isMobile and 16  or 13
-local CIRCLE_SZ = isMobile and 24  or 18
-local CIRCLE_CR = isMobile and 12  or 9
-local ICON_SZ   = isMobile and 18  or 14
-local LABEL_SZ  = isMobile and 13  or 13
+local TOGGLE_H  = isMobile and 68 or 42
+local TOGGLE_W  = isMobile and 64 or 44
+local TOGGLE_SH = isMobile and 36 or 26
+local TOGGLE_CR = isMobile and 18 or 13
+local CIRCLE_SZ = isMobile and 28 or 18
+local CIRCLE_CR = isMobile and 14 or 9
+local ICON_SZ   = isMobile and 20 or 14
+local LABEL_SZ  = isMobile and 14 or 13
 
 -- ========================
 -- MAIN FRAME
@@ -423,18 +424,17 @@ local MinBtn = Instance.new("TextButton")
 MinBtn.Name             = "MinBtn"
 MinBtn.Parent           = MainFrame
 MinBtn.BackgroundColor3 = C.accentDim
-MinBtn.Position         = UDim2.new(1, -44, 0, 6)
-MinBtn.Size             = UDim2.new(0, 36, 0, 36)
+MinBtn.Position         = UDim2.new(1, isMobile and -52 or -44, 0, 6)
+MinBtn.Size             = UDim2.new(0, isMobile and 44 or 36, 0, isMobile and 44 or 36)
 MinBtn.Font             = Enum.Font.GothamBlack
 MinBtn.Text             = "−"
 MinBtn.TextColor3       = C.white
 MinBtn.TextSize         = 22
 MinBtn.ZIndex           = 15
 MinBtn.AutoButtonColor  = false
-addCorner(MinBtn, 18)
+addCorner(MinBtn, isMobile and 22 or 18)
 addStroke(MinBtn, C.accent, 1.5)
-MinBtn.MouseButton1Click:Connect(doMinimize)
-MinBtn.TouchTap:Connect(doMinimize)
+MinBtn.Activated:Connect(doMinimize)
 
 -- ========================
 -- DRAG MAIN FRAME (mobile)
@@ -443,7 +443,13 @@ if isMobile then
     local drag, dstart, dpos
     MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.Touch then
-            drag = true; dstart = input.Position; dpos = MainFrame.Position
+            local p = input.Position
+            local top = MainFrame.AbsolutePosition
+            local size = MainFrame.AbsoluteSize
+            local inHeader = p.Y <= top.Y + 48 and p.X < top.X + size.X - 58
+            if inHeader then
+                drag = true; dstart = p; dpos = MainFrame.Position
+            end
         end
     end)
     MainFrame.InputEnded:Connect(function(input)
@@ -512,8 +518,7 @@ for _, t in pairs(tabs) do
         end
         btn.TextColor3 = C.white; btn.BackgroundColor3 = C.accentDim
     end
-    btn.MouseButton1Click:Connect(onTab)
-    btn.TouchTap:Connect(onTab)
+    btn.Activated:Connect(onTab)
 end
 
 -- ========================
@@ -591,8 +596,7 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
         end
         callback(state)
     end
-    hitArea.MouseButton1Click:Connect(toggle)
-    hitArea.TouchTap:Connect(toggle)
+    hitArea.Activated:Connect(toggle)
     return function(v)
         state = v
         switchBg.BackgroundColor3 = state and C.accent or C.off
@@ -697,8 +701,7 @@ unloadBtn.Parent = unloadCard; unloadBtn.BackgroundTransparency = 1
 unloadBtn.Size = UDim2.new(1, 0, 1, 0); unloadBtn.Font = Enum.Font.GothamBold
 unloadBtn.Text = "⏹  Unload Script"; unloadBtn.TextColor3 = C.red
 unloadBtn.TextSize = 11; unloadBtn.AutoButtonColor = false
-unloadBtn.MouseButton1Click:Connect(_doUnload)
-unloadBtn.TouchTap:Connect(_doUnload)
+unloadBtn.Activated:Connect(_doUnload)
 
 -- ========================
 -- SURVIVOR TAB
@@ -777,8 +780,7 @@ local function doReset()
         cfgStatusLbl.Text = "✓ Config loaded"; cfgStatusLbl.TextColor3 = C.green
     end)
 end
-resetBtn.MouseButton1Click:Connect(doReset)
-resetBtn.TouchTap:Connect(doReset)
+resetBtn.Activated:Connect(doReset)
 
 -- ========================
 -- CROSSHAIR GUI
