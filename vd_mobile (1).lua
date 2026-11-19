@@ -5,6 +5,13 @@
     NEW: Auto Save/Load Config + ESP per kategori
 ]]
 
+-- double-init guard
+if _G.HANGMA_LOADED then
+    warn("[HANGMA] Already loaded. Unload first.")
+    return
+end
+_G.HANGMA_LOADED = true
+
 -- ========================
 -- SERVICES
 -- ========================
@@ -110,6 +117,39 @@ local ActionPath           = "Survivor-mob.Controls.action.check"
 local HeartbeatConnection  = nil
 local VisibilityConnection = nil
 local PlayerGui            = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ========================
+-- UNLOAD GUARD
+-- ========================
+local ScriptRunning        = true
+local _RenderConnection    = nil
+local _MainHBConnection    = nil
+local _AllConnections      = {}
+
+local function _trackConn(c)
+    if c then table.insert(_AllConnections, c) end
+    return c
+end
+
+local function _doUnload()
+    ScriptRunning = false
+    -- stop skillcheck loops
+    if HeartbeatConnection  then HeartbeatConnection:Disconnect();  HeartbeatConnection  = nil end
+    if VisibilityConnection then VisibilityConnection:Disconnect(); VisibilityConnection = nil end
+    -- stop main loops
+    if _RenderConnection    then _RenderConnection:Disconnect();    _RenderConnection    = nil end
+    if _MainHBConnection    then _MainHBConnection:Disconnect();    _MainHBConnection    = nil end
+    -- stop tracked connections (input, etc.)
+    for _, c in ipairs(_AllConnections) do
+        pcall(function() if c.Connected then c:Disconnect() end end)
+    end
+    _AllConnections = {}
+    -- destroy GUIs
+    if IndicatorGui and IndicatorGui.Parent then IndicatorGui:Destroy() end
+    if ScreenGui    and ScreenGui.Parent    then ScreenGui:Destroy()    end
+    _G.HANGMA_LOADED = nil
+    print("[HANGMA] Unloaded.")
+end
 
 -- ESP state
 local IndicatorGui      = nil
@@ -651,6 +691,15 @@ resetBtn.Size = UDim2.new(1, 0, 1, 0); resetBtn.Font = Enum.Font.GothamBold
 resetBtn.Text = "🗑  Reset Config"; resetBtn.TextColor3 = C.red
 resetBtn.TextSize = 11; resetBtn.AutoButtonColor = false
 
+local unloadCard = createCard(HomeFrame, 296, 40)
+local unloadBtn  = Instance.new("TextButton")
+unloadBtn.Parent = unloadCard; unloadBtn.BackgroundTransparency = 1
+unloadBtn.Size = UDim2.new(1, 0, 1, 0); unloadBtn.Font = Enum.Font.GothamBold
+unloadBtn.Text = "⏹  Unload Script"; unloadBtn.TextColor3 = C.red
+unloadBtn.TextSize = 11; unloadBtn.AutoButtonColor = false
+unloadBtn.MouseButton1Click:Connect(_doUnload)
+unloadBtn.TouchTap:Connect(_doUnload)
+
 -- ========================
 -- SURVIVOR TAB
 -- ========================
@@ -1079,12 +1128,14 @@ end
 -- ========================
 -- MAIN LOOP
 -- ========================
-RunService.RenderStepped:Connect(function()
+_RenderConnection = RunService.RenderStepped:Connect(function()
+    if not ScriptRunning then return end
     Camera.FieldOfView   = fovEnabled and targetFOV or defaultFOV
     CrosshairGUI.Visible = crosshairEnabled and not isMobile
 end)
 
-RunService.Heartbeat:Connect(function()
+_MainHBConnection = RunService.Heartbeat:Connect(function()
+    if not ScriptRunning then return end
     local now = tick()
     if now - LastUpdateTick < 0.05 then return end
     LastUpdateTick = now
