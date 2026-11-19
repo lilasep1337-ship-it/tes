@@ -114,19 +114,18 @@ local function addGradient(parent, c0, c1, rotation)
     return g
 end
 
-local FRAME_W = isMobile and 340 or 400
-local FRAME_H = isMobile and 480 or 440
-local SIDE_W  = isMobile and 100 or 120
+local FRAME_W = isMobile and 300 or 400
+local FRAME_H = isMobile and 420 or 440
+local SIDE_W  = isMobile and 90  or 120
 
--- mobile toggle dimensions — lebih gede biar gampang di-tap
-local TOGGLE_H      = isMobile and 62  or 42   -- card height
-local TOGGLE_W      = isMobile and 56  or 44   -- switch width
-local TOGGLE_SH     = isMobile and 32  or 26   -- switch height
-local TOGGLE_CR     = isMobile and 16  or 13   -- switch corner radius
-local CIRCLE_SZ     = isMobile and 24  or 18   -- knob size
-local CIRCLE_CR     = isMobile and 12  or 9    -- knob corner radius
-local ICON_SZ       = isMobile and 18  or 14
-local LABEL_SZ      = isMobile and 13  or 13
+local TOGGLE_H  = isMobile and 62  or 42
+local TOGGLE_W  = isMobile and 56  or 44
+local TOGGLE_SH = isMobile and 32  or 26
+local TOGGLE_CR = isMobile and 16  or 13
+local CIRCLE_SZ = isMobile and 24  or 18
+local CIRCLE_CR = isMobile and 12  or 9
+local ICON_SZ   = isMobile and 18  or 14
+local LABEL_SZ  = isMobile and 13  or 13
 
 -- ========================
 -- MAIN FRAME
@@ -164,7 +163,7 @@ Logo.Size                   = UDim2.new(1, 0, 0, 30)
 Logo.Font                   = Enum.Font.GothamBlack
 Logo.Text                   = "HANGMA"
 Logo.TextColor3             = C.accent
-Logo.TextSize               = isMobile and 14 or 18
+Logo.TextSize               = isMobile and 12 or 18
 
 local TabContainer = Instance.new("Frame")
 TabContainer.Parent                 = Sidebar
@@ -268,17 +267,18 @@ CircleBtn.TouchTap:Connect(toggleMinimize)
 local MinimizeBtn = Instance.new("TextButton")
 MinimizeBtn.Name                   = "MinimizeBtn"
 MinimizeBtn.Parent                 = MainFrame
-MinimizeBtn.BackgroundColor3       = Color3.fromRGB(0, 0, 0)
-MinimizeBtn.BackgroundTransparency = 0.6
-MinimizeBtn.Position               = UDim2.new(1, -28, 0, 4)
-MinimizeBtn.Size                   = UDim2.new(0, 24, 0, 24)
+MinimizeBtn.BackgroundColor3       = C.accentDim
+MinimizeBtn.BackgroundTransparency = 0
+MinimizeBtn.Position               = UDim2.new(1, -38, 0, 4)
+MinimizeBtn.Size                   = UDim2.new(0, 32, 0, 32)
 MinimizeBtn.Font                   = Enum.Font.GothamBold
 MinimizeBtn.Text                   = "−"
 MinimizeBtn.TextColor3             = C.white
-MinimizeBtn.TextSize               = 16
+MinimizeBtn.TextSize               = 20
 MinimizeBtn.ZIndex                 = 10
 MinimizeBtn.AutoButtonColor        = false
-addCorner(MinimizeBtn, 6)
+addCorner(MinimizeBtn, 16)
+addStroke(MinimizeBtn, C.accent, 1.5)
 MinimizeBtn.MouseButton1Click:Connect(toggleMinimize)
 MinimizeBtn.TouchTap:Connect(toggleMinimize)
 
@@ -364,7 +364,7 @@ for _, t in pairs(tabs) do
     btn.Font             = Enum.Font.GothamBold
     btn.Text             = t.name
     btn.TextColor3       = C.subtext
-    btn.TextSize         = isMobile and 10 or 11
+    btn.TextSize         = isMobile and 9 or 11
     btn.AutoButtonColor  = false
     addCorner(btn, 6)
     addStroke(btn, C.border, 1)
@@ -401,7 +401,6 @@ end
 local function createToggle(parent, icon, text, yOffset, default, callback)
     local card = createCard(parent, yOffset, TOGGLE_H)
 
-    -- seluruh card bisa di-tap (bukan cuma switch kecilnya)
     local hitArea = Instance.new("TextButton")
     hitArea.Parent                 = card
     hitArea.BackgroundTransparency = 1
@@ -424,14 +423,13 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     label.Parent                 = card
     label.BackgroundTransparency = 1
     label.Position               = UDim2.new(0, 36, 0, 0)
-    label.Size                   = UDim2.new(0.52, 0, 1, 0)
+    label.Size                   = UDim2.new(0.48, 0, 1, 0)
     label.Font                   = Enum.Font.Gotham
     label.Text                   = text
     label.TextColor3             = C.text
     label.TextSize               = LABEL_SZ
     label.TextXAlignment         = Enum.TextXAlignment.Left
 
-    -- switch visual
     local switchBg = Instance.new("Frame")
     switchBg.Parent           = card
     switchBg.BackgroundColor3 = default and C.accent or C.off
@@ -461,7 +459,6 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
                 or  UDim2.new(0, 4, 0.5, -(CIRCLE_SZ / 2)),
             "Out", "Quad", 0.15, true
         )
-        -- flash card border
         local stroke = card:FindFirstChildOfClass("UIStroke")
         if stroke then
             stroke.Color = state and C.accent or C.border
@@ -474,7 +471,6 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
         callback(state)
     end
 
-    -- tap anywhere on card triggers toggle
     hitArea.MouseButton1Click:Connect(toggle)
     hitArea.TouchTap:Connect(toggle)
 
@@ -596,7 +592,7 @@ BannerTitle.Size                   = UDim2.new(1, -14, 0, 30)
 BannerTitle.Font                   = Enum.Font.GothamBlack
 BannerTitle.Text                   = "BY CUQY PUQY"
 BannerTitle.TextColor3             = C.accent
-BannerTitle.TextSize               = isMobile and 16 or 20
+BannerTitle.TextSize               = isMobile and 14 or 20
 BannerTitle.TextXAlignment         = Enum.TextXAlignment.Left
 local BannerSub = Instance.new("TextLabel")
 BannerSub.Parent                 = BannerCard
@@ -611,9 +607,7 @@ BannerSub.TextXAlignment         = Enum.TextXAlignment.Left
 
 createSection(HomeFrame, "KEYBIND DEFAULT", 93)
 local keybinds = isMobile and {
-    { key = "CIRCLE",    desc = "Buka / Tutup Menu"         },
-    { key = "TAP LUNGE", desc = "Toggle Lunge"              },
-    { key = "TAP CHECK", desc = "Trigger Skillcheck Manual" },
+    { key = "CIRCLE", desc = "Buka / Tutup Menu" },
 } or {
     { key = "R-CTRL", desc = "Sembunyikan / Tampilkan Menu" },
     { key = "P",      desc = "Toggle Infinite Lunge"       },
@@ -683,65 +677,9 @@ CrosshairGUI.Visible           = false
 addCorner(CrosshairGUI, 3)
 
 -- ========================
--- MOBILE BUTTONS
+-- MOBILE TOUCH
 -- ========================
 if isMobile then
-    local lungeBtn = Instance.new("TextButton")
-    lungeBtn.Parent           = ScreenGui
-    lungeBtn.BackgroundColor3 = C.off
-    lungeBtn.Position         = UDim2.new(1, -130, 1, -80)
-    lungeBtn.Size             = UDim2.new(0, 60, 0, 60)
-    lungeBtn.Font             = Enum.Font.GothamBlack
-    lungeBtn.Text             = "⚡"
-    lungeBtn.TextColor3       = C.accent
-    lungeBtn.TextSize         = 24
-    lungeBtn.ZIndex           = 10
-    lungeBtn.AutoButtonColor  = false
-    addCorner(lungeBtn, 30)
-    addStroke(lungeBtn, C.accent, 1.5)
-    lungeBtn.TouchTap:Connect(function()
-        lungeEnabled = not lungeEnabled
-        updateLungeUI(lungeEnabled)
-        lungeBtn.BackgroundColor3 = lungeEnabled and C.accent or C.off
-        lungeBtn.TextColor3       = lungeEnabled and C.bg    or C.accent
-        TweenService:Create(lungeBtn, TweenInfo.new(0.1), { Size = UDim2.new(0, 54, 0, 54) }):Play()
-        task.delay(0.1, function()
-            TweenService:Create(lungeBtn, TweenInfo.new(0.1), { Size = UDim2.new(0, 60, 0, 60) }):Play()
-        end)
-    end)
-
-    local skillBtn = Instance.new("TextButton")
-    skillBtn.Parent           = ScreenGui
-    skillBtn.BackgroundColor3 = C.off
-    skillBtn.Position         = UDim2.new(1, -210, 1, -80)
-    skillBtn.Size             = UDim2.new(0, 60, 0, 60)
-    skillBtn.Font             = Enum.Font.GothamBlack
-    skillBtn.Text             = "✓"
-    skillBtn.TextColor3       = C.green
-    skillBtn.TextSize         = 28
-    skillBtn.ZIndex           = 10
-    skillBtn.AutoButtonColor  = false
-    addCorner(skillBtn, 30)
-    addStroke(skillBtn, C.green, 1.5)
-
-    local skillHolding  = false
-    local skillInterval = 0
-
-    skillBtn.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            skillHolding              = true
-            skillBtn.BackgroundColor3 = C.green
-            skillBtn.TextColor3       = C.bg
-        end
-    end)
-    skillBtn.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch then
-            skillHolding              = false
-            skillBtn.BackgroundColor3 = C.off
-            skillBtn.TextColor3       = C.green
-        end
-    end)
-
     UserInputService.TouchStarted:Connect(function(touch)
         local vp = workspace.CurrentCamera.ViewportSize
         if touch.Position.X > vp.X * 0.5 and touch.Position.Y > vp.Y * 0.6 then
@@ -749,22 +687,7 @@ if isMobile then
         end
     end)
     UserInputService.TouchEnded:Connect(function()
-        isMouseDown  = false
-        skillHolding = false
-    end)
-
-    RunService.Heartbeat:Connect(function(dt)
-        if skillHolding and (skillcheckEnabled or skillcheckNotPerfectEnabled) then
-            skillInterval = skillInterval + dt
-            if skillInterval >= 0.05 then
-                skillInterval = 0
-                VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.Space, false, game)
-                task.wait(0.01)
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-            end
-        else
-            skillInterval = 0
-        end
+        isMouseDown = false
     end)
 end
 
@@ -782,37 +705,88 @@ local function applyESP(character)
 end
 
 -- ========================
--- PERFECT SKILLCHECK
+-- SKILLCHECK — tap fingerprint button
 -- ========================
+local function findSkillcheckNodes(root)
+    for _, child in ipairs(root:GetDescendants()) do
+        if (child:IsA("Frame") or child:IsA("ImageLabel")) and child.Visible then
+            local line = child:FindFirstChild("Line")
+            local goal = child:FindFirstChild("Goal")
+            if line and goal then
+                return line, goal
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function pressSkill()
+    local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if not PG then return end
+
+    -- Cari ImageButton visible di PlayerGui,
+    -- ukuran bulat kecil (30–120px), bukan bagian dari GUI kita
+    local target = nil
+    for _, child in ipairs(PG:GetDescendants()) do
+        if child:IsA("ImageButton") and child.Visible
+        and child.AbsoluteSize.X > 30 and child.AbsoluteSize.X < 120
+        and not child:IsDescendantOf(ScreenGui) then
+            target = child
+            break
+        end
+    end
+
+    if target then
+        local pos = target.AbsolutePosition
+        local sz  = target.AbsoluteSize
+        local cx  = pos.X + sz.X / 2
+        local cy  = pos.Y + sz.Y / 2
+        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true,  game, 1)
+        task.wait(0.01)
+        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+    else
+        -- fallback Space kalau button tidak ketemu
+        VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.Space, false, game)
+        task.wait(0.01)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+    end
+end
+
 local function doSkillcheck()
     if not skillcheckEnabled and not skillcheckNotPerfectEnabled then return end
-    local PG    = LocalPlayer:FindFirstChild("PlayerGui")
-    local gui   = PG and PG:FindFirstChild("SkillCheckPromptGui")
-    local check = gui and gui:FindFirstChild("Check")
-    if check and check.Visible then
-        local line = check:FindFirstChild("Line")
-        local goal = check:FindFirstChild("Goal")
-        if line and goal then
-            local lr = line.Rotation % 360
-            local gr = goal.Rotation % 360
-            local gs = (gr + 104) % 360
-            local ge = (gr + 114) % 360
-            if skillcheckEnabled then
-                local inGoal = (gs > ge) and (lr >= gs or lr <= ge) or (lr >= gs and lr <= ge)
-                if inGoal then
-                    VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.Space, false, game)
-                    task.wait(0.01)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-                end
-            elseif skillcheckNotPerfectEnabled then
-                local justAfterWhite = (lr >= ge + 12 and lr <= ge + 18)
-                if gs > ge then justAfterWhite = (lr >= ge + 12 and lr < gs) end
-                if justAfterWhite then
-                    VirtualInputManager:SendKeyEvent(true,  Enum.KeyCode.Space, false, game)
-                    task.wait(0.01)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-                end
-            end
+
+    local PG = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if not PG then return end
+
+    local line, goal = findSkillcheckNodes(PG)
+    if not (line and goal) then return end
+
+    local lr = line.Rotation % 360
+    local gr = goal.Rotation % 360
+
+    local ZONE_START_OFFSET = 0
+    local ZONE_END_OFFSET   = 10
+
+    local gs = (gr + ZONE_START_OFFSET) % 360
+    local ge = (gr + ZONE_END_OFFSET)   % 360
+
+    local function inArc(angle, arcStart, arcEnd)
+        if arcStart <= arcEnd then
+            return angle >= arcStart and angle <= arcEnd
+        else
+            return angle >= arcStart or angle <= arcEnd
+        end
+    end
+
+    if skillcheckEnabled then
+        if inArc(lr, gs, ge) then
+            pressSkill()
+        end
+    elseif skillcheckNotPerfectEnabled then
+        local NP_START = (ge + 5)  % 360
+        local NP_END   = (ge + 15) % 360
+        if inArc(lr, NP_START, NP_END) then
+            pressSkill()
         end
     end
 end
