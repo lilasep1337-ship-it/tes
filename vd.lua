@@ -454,9 +454,11 @@ local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30,
     end
 end)
 
+local scanPallets
 local updateESPPalletUI = createToggle(VisualFrame, "🪵", "ESP Pallet", 78, espPallet, function(v)
     espPallet = v
     saveConfig()
+    if v and scanPallets then scanPallets() end
     if not v then
         for obj in pairs(objectHighlights) do
             if obj and obj.Parent and (obj.Name == "Palletwrong" or obj.Name == "Pallet") then
@@ -661,6 +663,21 @@ local function applyObjectHighlight(obj, color)
     highlight.Enabled = true
 end
 
+local function isPalletObject(obj)
+    return (obj:IsA("Model") or obj:IsA("BasePart"))
+        and (obj.Name == "Palletwrong" or obj.Name == "Pallet")
+end
+
+-- Pemindaian penuh hanya dilakukan sekali saat ESP pallet diaktifkan.
+scanPallets = function()
+    if not espPallet then return end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isPalletObject(obj) then
+            applyObjectHighlight(obj, Color3.fromRGB(74, 255, 181))
+        end
+    end
+end
+
 local function updateGeneratorBillboard(generator, percent)
     if not generator or not generator.Parent then return end
     local billboard = generatorBillboards[generator]
@@ -693,34 +710,56 @@ local function updateGeneratorBillboard(generator, percent)
     end
 end
 
+-- Pallet baru dideteksi lewat event, bukan pemindaian Workspace berulang.
+workspace.DescendantAdded:Connect(function(obj)
+    if espPallet and isPalletObject(obj) then
+        applyObjectHighlight(obj, Color3.fromRGB(74, 255, 181))
+    end
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+    if objectHighlights[obj] or generatorBillboards[obj] then
+        removeObjectESP(obj)
+    end
+end)
+
+if espPallet then scanPallets() end
+
 local function updateObjectESP()
     local now = tick()
     if now - lastObjectESPUpdate < 0.25 then return end
     lastObjectESPUpdate = now
-    local map = Workspace:FindFirstChild("Map")
-    local seenPallets, seenGenerators = {}, {}
-    -- Pallet dapat berada langsung di Workspace atau di dalam Map.
-    if espPallet then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if (obj:IsA("Model") or obj:IsA("BasePart"))
-                and (obj.Name == "Palletwrong" or obj.Name == "Pallet") then
-                seenPallets[obj] = true
-                applyObjectHighlight(obj, Color3.fromRGB(74, 255, 181))
-            end
-        end
-    end
+    local map = workspace:FindFirstChild("Map")
+    local seenGenerators = {}
+
     if espGenerator and map then
         for _, obj in ipairs(map:GetDescendants()) do
             if obj:IsA("Model") and obj.Name == "Generator" then
                 seenGenerators[obj] = true
-                applyObjectHighlight(obj, Color3.fromRGB(180, 100, 255))
-                updateGeneratorBillboard(obj, getGeneratorPercent(obj))
+                local percent = getGeneratorPercent(obj)
+                if percent and percent >= 100 then
+                    -- Generator yang selesai tidak lagi diberi highlight atau persentase.
+                    removeObjectESP(obj)
+                else
+                    applyObjectHighlight(obj, Color3.fromRGB(180, 100, 255))
+                    updateGeneratorBillboard(obj, percent)
+                end
             end
         end
     end
+
     for obj in pairs(objectHighlights) do
-        local keep = (espPallet and seenPallets[obj]) or (espGenerator and seenGenerators[obj])
-        if not keep then removeObjectESP(obj) end
+        if obj.Name == "Generator" then
+            if not (espGenerator and seenGenerators[obj]) then
+                removeObjectESP(obj)
+            end
+        elseif isPalletObject(obj) then
+            if not (espPallet and obj.Parent) then
+                removeObjectESP(obj)
+            end
+        else
+            removeObjectESP(obj)
+        end
     end
     for obj in pairs(generatorBillboards) do
         if not seenGenerators[obj] then removeObjectESP(obj) end
