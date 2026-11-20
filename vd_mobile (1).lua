@@ -1103,28 +1103,33 @@ function InitializeAutobuy()
         if not check then return end
         local line = check:WaitForChild("Line")
         local goal = check:WaitForChild("Goal")
-        if VisibilityConnection then VisibilityConnection:Disconnect() end
-        VisibilityConnection = check:GetPropertyChangedSignal("Visible"):Connect(function()
-            if LocalPlayer.Team and LocalPlayer.Team.Name == "Survivors"
-            and check.Visible and skillcheckEnabled then
-                if HeartbeatConnection then HeartbeatConnection:Disconnect() end
-                HeartbeatConnection = RunService.Heartbeat:Connect(function()
-                    local lr = line.Rotation % 360
-                    local gr = goal.Rotation % 360
-                    -- Mengikuti logika PC: gunakan rentang area putih langsung.
-                    local gs = (gr + 104) % 360
-                    local ge = (gr + 114) % 360
-                    local inGoal = (gs > ge and (lr >= gs or lr <= ge))
-                        or (lr >= gs and lr <= ge)
-                    if inGoal then
-                        TriggerMobileButton()
-                        if HeartbeatConnection then
-                            HeartbeatConnection:Disconnect(); HeartbeatConnection = nil
-                        end
-                    end
-                end)
-            elseif HeartbeatConnection then
-                HeartbeatConnection:Disconnect(); HeartbeatConnection = nil
+        if HeartbeatConnection then HeartbeatConnection:Disconnect() end
+        -- Jangan memutus loop setelah satu perfect. King Source dapat memunculkan
+        -- beberapa skillcheck memakai objek Check yang sama.
+        local wasInGoal = false
+        HeartbeatConnection = RunService.Heartbeat:Connect(function()
+            if not ScriptRunning then return end
+            if not (LocalPlayer.Team and LocalPlayer.Team.Name == "Survivors")
+                or not skillcheckEnabled or not check.Visible then
+                wasInGoal = false
+                return
+            end
+            if not line.Parent or not goal.Parent then return end
+
+            local lr = line.Rotation % 360
+            local gr = goal.Rotation % 360
+            -- Mengikuti logika PC: gunakan rentang area putih langsung.
+            local gs = (gr + 104) % 360
+            local ge = (gr + 114) % 360
+            local inGoal = (gs > ge and (lr >= gs or lr <= ge))
+                or (lr >= gs and lr <= ge)
+
+            -- Satu input saat masuk zona; siap lagi setelah indikator keluar.
+            if inGoal and not wasInGoal then
+                wasInGoal = true
+                TriggerMobileButton()
+            elseif not inGoal then
+                wasInGoal = false
             end
         end)
     end)
