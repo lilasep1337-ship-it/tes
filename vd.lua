@@ -35,6 +35,7 @@ local targetFOV     = 100
 local defaultFOV    = Camera.FieldOfView
 local espPallet     = false
 local espGenerator  = false
+local espTrap       = false  -- NEW
 
 -- ========================
 -- AUTO SAVE / LOAD CONFIG
@@ -61,6 +62,7 @@ local function saveConfig()
                 espEnabled = espEnabled,
                 espPallet = espPallet,
                 espGenerator = espGenerator,
+                espTrap = espTrap,  -- NEW
                 crosshairEnabled = crosshairEnabled,
                 fovEnabled = fovEnabled,
                 skillcheckEnabled = skillcheckEnabled,
@@ -82,6 +84,7 @@ targetFOV = tonumber(Config.targetFOV) or 100
 -- Object ESP state
 espPallet = Config.espPallet == true
 espGenerator = Config.espGenerator == true
+espTrap = Config.espTrap == true  -- NEW
 local objectHighlights = {}
 local generatorBillboards = {}
 local lastObjectESPUpdate = 0
@@ -133,6 +136,7 @@ local C = {
     subtext   = Color3.fromRGB(120, 130, 160),
     off       = Color3.fromRGB(38,  42,  60),
     white     = Color3.fromRGB(255, 255, 255),
+    orange    = Color3.fromRGB(255, 160, 40),  -- NEW: warna trap
 }
 
 local function addStroke(parent, color, thickness)
@@ -443,7 +447,6 @@ createSection(VisualFrame, "ESP", 5)
 local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30, espEnabled, function(v)
     espEnabled = v
     saveConfig()
-    -- Kalau dimatiin, langsung disable semua highlight yang ada
     if not v then
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
@@ -486,12 +489,99 @@ local updateESPGeneratorUI = createToggle(VisualFrame, "⚙", "ESP Generator + %
     end
 end)
 
-createSection(VisualFrame, "FOV", 185)
-local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", 210, fovEnabled, function(v) fovEnabled = v; saveConfig() end)
-local fovInput = createLabelInput(VisualFrame, "👁", "Target FOV:", tostring(targetFOV), 258, function(txt) targetFOV = tonumber(txt) or 100; saveConfig() end)
+-- ========================
+-- ESP TRAP (NEW)
+-- ========================
+local trapHighlights = {}
 
-createSection(VisualFrame, "CROSSHAIR", 313)
-local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", 338, crosshairEnabled, function(v) crosshairEnabled = v; saveConfig() end)
+local TRAP_NAMES = {
+    -- The Butcher / Violence District
+    "Bear_Trap", "BearTrap", "Beartrap",
+    "Trap", "trap",
+    "Leghold", "LegholdTrap",
+    "MacMillanTrap",
+    -- nama umum lain yang sering dipakai game DBD-like
+    "BloodwebTrap", "FloorTrap",
+    "Punji", "PunjiStake",
+    "CrowTrap", "SpringboardTrap",
+}
+
+local function isTrapObject(obj)
+    if not (obj:IsA("Model") or obj:IsA("BasePart")) then return false end
+    for _, name in ipairs(TRAP_NAMES) do
+        if obj.Name == name then return true end
+    end
+    -- cek nama case-insensitive yang mengandung "trap"
+    if obj.Name:lower():find("trap") then return true end
+    return false
+end
+
+local function applyTrapHighlight(obj)
+    if not obj or not obj.Parent then return end
+    if trapHighlights[obj] and trapHighlights[obj].Parent then return end
+    local highlight = Instance.new("Highlight")
+    highlight.Name               = "HANGMA_TrapESP"
+    highlight.Adornee            = obj
+    highlight.FillColor          = C.orange
+    highlight.OutlineColor       = C.orange
+    highlight.FillTransparency   = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Parent             = obj
+    trapHighlights[obj]          = highlight
+end
+
+local function removeTrapHighlight(obj)
+    local h = trapHighlights[obj]
+    if h then pcall(function() h:Destroy() end) end
+    trapHighlights[obj] = nil
+end
+
+local function scanTraps()
+    if not espTrap then return end
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isTrapObject(obj) then
+            applyTrapHighlight(obj)
+        end
+    end
+end
+
+-- Deteksi trap baru yang muncul
+workspace.DescendantAdded:Connect(function(obj)
+    if espTrap and isTrapObject(obj) then
+        task.wait(0.1) -- tunggu sebentar agar fully parented
+        applyTrapHighlight(obj)
+    end
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+    if trapHighlights[obj] then
+        removeTrapHighlight(obj)
+    end
+end)
+
+local updateESPTrapUI = createToggle(VisualFrame, "🪤", "ESP Trap (Butcher)", 174, espTrap, function(v)
+    espTrap = v
+    saveConfig()
+    if v then
+        scanTraps()
+    else
+        for obj in pairs(trapHighlights) do
+            removeTrapHighlight(obj)
+        end
+    end
+end)
+
+if espTrap then scanTraps() end
+-- ========================
+-- END ESP TRAP
+-- ========================
+
+createSection(VisualFrame, "FOV", 233)
+local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", 258, fovEnabled, function(v) fovEnabled = v; saveConfig() end)
+local fovInput = createLabelInput(VisualFrame, "👁", "Target FOV:", tostring(targetFOV), 306, function(txt) targetFOV = tonumber(txt) or 100; saveConfig() end)
+
+createSection(VisualFrame, "CROSSHAIR", 361)
+local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", 386, crosshairEnabled, function(v) crosshairEnabled = v; saveConfig() end)
 
 -- ========================
 -- LAINNYA: AUTO SAVE / RESET
@@ -535,13 +625,10 @@ addCorner(CrosshairGUI, 3)
 
 -- ========================
 -- ESP LOGIC — Solara-safe
--- Pakai tabel tracking buat hindari double-instance
--- dan re-apply otomatis kalau character respawn
 -- ========================
 local espConnections = {}
 
 local function cleanESPHighlight(character)
-    -- Hapus semua ESPHighlight lama (jaga-jaga double instance di Solara)
     for _, obj in pairs(character:GetChildren()) do
         if obj.Name == "ESPHighlight" then
             obj:Destroy()
@@ -552,9 +639,7 @@ end
 local function applyESP(player)
     local character = player.Character
     if not character then return end
-
     cleanESPHighlight(character)
-
     local highlight = Instance.new("Highlight")
     highlight.Name               = "ESPHighlight"
     highlight.FillTransparency   = 0.92
@@ -566,19 +651,15 @@ local function applyESP(player)
 end
 
 local function setupPlayerESP(player)
-    -- Lepas koneksi lama kalau ada
     if espConnections[player] then
         espConnections[player]:Disconnect()
         espConnections[player] = nil
     end
-
     if player.Character then
         applyESP(player)
     end
-
-    -- Auto re-apply tiap respawn
     espConnections[player] = player.CharacterAdded:Connect(function(char)
-        task.wait(0.5) -- tunggu character fully loaded
+        task.wait(0.5)
         applyESP(player)
     end)
 end
@@ -593,27 +674,24 @@ local function teardownPlayerESP(player)
     end
 end
 
--- Setup ESP untuk semua player yang sudah ada
 for _, p in pairs(Players:GetPlayers()) do
     if p ~= LocalPlayer then
         setupPlayerESP(p)
     end
 end
 
--- Setup ESP untuk player baru masuk
 Players.PlayerAdded:Connect(function(p)
     if p ~= LocalPlayer then
         setupPlayerESP(p)
     end
 end)
 
--- Bersihkan koneksi kalau player keluar
 Players.PlayerRemoving:Connect(function(p)
     espConnections[p] = nil
 end)
 
 -- ========================
--- OBJECT ESP: PALLET + GENERATOR PROGRESS
+-- OBJECT ESP: PALLET + GENERATOR
 -- ========================
 local function getGameValue(obj, names)
     for _, name in ipairs(names) do
@@ -632,7 +710,6 @@ local function getGeneratorPercent(generator)
     local value = getGameValue(generator, {"Progress", "RepairProgress", "GeneratorProgress", "Repair", "Value", "GenValue"})
     value = tonumber(value)
     if not value then return nil end
-    -- Dukungan nilai 0..1 maupun 0..100.
     if value >= 0 and value <= 1 then value = value * 100 end
     return math.clamp(math.floor(value + 0.5), 0, 100)
 end
@@ -668,7 +745,6 @@ local function isPalletObject(obj)
         and (obj.Name == "Palletwrong" or obj.Name == "Pallet")
 end
 
--- Pemindaian penuh hanya dilakukan sekali saat ESP pallet diaktifkan.
 scanPallets = function()
     if not espPallet then return end
     for _, obj in ipairs(workspace:GetDescendants()) do
@@ -710,7 +786,6 @@ local function updateGeneratorBillboard(generator, percent)
     end
 end
 
--- Pallet baru dideteksi lewat event, bukan pemindaian Workspace berulang.
 workspace.DescendantAdded:Connect(function(obj)
     if espPallet and isPalletObject(obj) then
         applyObjectHighlight(obj, Color3.fromRGB(74, 255, 181))
@@ -738,7 +813,6 @@ local function updateObjectESP()
                 seenGenerators[obj] = true
                 local percent = getGeneratorPercent(obj)
                 if percent and percent >= 100 then
-                    -- Generator yang selesai tidak lagi diberi highlight atau persentase.
                     removeObjectESP(obj)
                 else
                     applyObjectHighlight(obj, Color3.fromRGB(180, 100, 255))
@@ -766,11 +840,11 @@ local function updateObjectESP()
     end
 end
 
--- Reset hanya mengembalikan setting script, tidak mengubah setting game.
 local function resetConfig()
     espEnabled = false
     espPallet = false
     espGenerator = false
+    espTrap = false  -- NEW
     crosshairEnabled = false
     fovEnabled = false
     skillcheckEnabled = false
@@ -780,6 +854,7 @@ local function resetConfig()
     updateESPUI(false)
     updateESPPalletUI(false)
     updateESPGeneratorUI(false)
+    updateESPTrapUI(false)  -- NEW
     updateFOVUI(false)
     updateCrosshairUI(false)
     updateSkillcheckUI(false)
@@ -794,6 +869,10 @@ local function resetConfig()
     for obj, billboard in pairs(generatorBillboards) do
         pcall(function() billboard:Destroy() end)
         generatorBillboards[obj] = nil
+    end
+    -- NEW: reset trap highlights
+    for obj in pairs(trapHighlights) do
+        removeTrapHighlight(obj)
     end
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer and player.Character then
@@ -857,23 +936,18 @@ end
 -- MAIN LOOP
 -- ========================
 RunService.RenderStepped:Connect(function()
-    -- Skillcheck
     pcall(doSkillcheck)
 
-    -- FOV Logic
     if fovEnabled then
         Camera.FieldOfView = targetFOV
     else
         Camera.FieldOfView = defaultFOV
     end
 
-    -- Crosshair Logic
     CrosshairGUI.Visible = crosshairEnabled
 
-    -- ESP object terpisah: pallet dan generator + persen
     pcall(updateObjectESP)
 
-    -- ESP update warna tiap frame (team bisa berubah mid-game)
     if espEnabled then
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
@@ -883,7 +957,6 @@ RunService.RenderStepped:Connect(function()
                     h.FillColor    = isKiller(p) and C.red or C.green
                     h.OutlineColor = isKiller(p) and C.red or C.green
                 elseif espEnabled then
-                    -- Highlight hilang (misalnya kena destroy), re-apply
                     applyESP(p)
                 end
             end
@@ -925,5 +998,4 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 showTab("HOME")
--- Pastikan konfigurasi yang dimuat langsung tersimpan dalam format terbaru.
 saveConfig()
