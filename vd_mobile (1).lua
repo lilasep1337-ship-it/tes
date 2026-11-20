@@ -2,7 +2,7 @@
     By cuqy puky
     Mobile + Delta Compatible
     FIX: Circle drag vs tap separation
-    NEW: Auto Save/Load Config + ESP per kategori
+    NEW: Auto Save/Load Config + ESP per kategori + ESP Trap (auto with Player)
 ]]
 
 -- double-init guard
@@ -131,31 +131,34 @@ local function _trackConn(c)
     return c
 end
 
-local function _doUnload()
-    ScriptRunning = false
-    -- stop skillcheck loops
-    if HeartbeatConnection  then HeartbeatConnection:Disconnect();  HeartbeatConnection  = nil end
-    if VisibilityConnection then VisibilityConnection:Disconnect(); VisibilityConnection = nil end
-    -- stop main loops
-    if _RenderConnection    then _RenderConnection:Disconnect();    _RenderConnection    = nil end
-    if _MainHBConnection    then _MainHBConnection:Disconnect();    _MainHBConnection    = nil end
-    -- stop tracked connections (input, etc.)
-    for _, c in ipairs(_AllConnections) do
-        pcall(function() if c.Connected then c:Disconnect() end end)
-    end
-    _AllConnections = {}
-    -- destroy GUIs
-    if IndicatorGui and IndicatorGui.Parent then IndicatorGui:Destroy() end
-    if ScreenGui    and ScreenGui.Parent    then ScreenGui:Destroy()    end
-    _G.HANGMA_LOADED = nil
-    print("[HANGMA] Unloaded.")
-end
-
 -- ESP state
 local IndicatorGui      = nil
 local ActiveGenerators  = {}
 local LastUpdateTick    = 0
 local LastESPRefresh    = 0
+
+-- Trap ESP state
+local trapHighlights    = {}
+
+local function _doUnload()
+    ScriptRunning = false
+    if HeartbeatConnection  then HeartbeatConnection:Disconnect();  HeartbeatConnection  = nil end
+    if VisibilityConnection then VisibilityConnection:Disconnect(); VisibilityConnection = nil end
+    if _RenderConnection    then _RenderConnection:Disconnect();    _RenderConnection    = nil end
+    if _MainHBConnection    then _MainHBConnection:Disconnect();    _MainHBConnection    = nil end
+    for _, c in ipairs(_AllConnections) do
+        pcall(function() if c.Connected then c:Disconnect() end end)
+    end
+    _AllConnections = {}
+    for obj, h in pairs(trapHighlights) do
+        pcall(function() h:Destroy() end)
+        trapHighlights[obj] = nil
+    end
+    if IndicatorGui and IndicatorGui.Parent then IndicatorGui:Destroy() end
+    if ScreenGui    and ScreenGui.Parent    then ScreenGui:Destroy()    end
+    _G.HANGMA_LOADED = nil
+    print("[HANGMA] Unloaded.")
+end
 
 -- ========================
 -- UTILS
@@ -197,6 +200,7 @@ local ESPColors = {
     Pallet    = Color3.fromRGB(74,  255, 181),
     Window    = Color3.fromRGB(74,  255, 181),
     Hook      = Color3.fromRGB(132, 255, 169),
+    Trap      = Color3.fromRGB(255, 160, 40),   -- orange, sama dengan vdpc
 }
 
 local MaskNames = {
@@ -214,6 +218,77 @@ local MaskColors = {
     ["Rabbit"]  = Color3.fromRGB(255, 105, 180),
     ["Alex"]    = Color3.fromRGB(255, 255, 255),
 }
+
+-- ========================
+-- TRAP DETECTION (dari vdpc)
+-- ========================
+local TRAP_NAMES = {
+    "Bear_Trap", "BearTrap", "Beartrap",
+    "Trap", "trap",
+    "Leghold", "LegholdTrap",
+    "MacMillanTrap",
+    "BloodwebTrap", "FloorTrap",
+    "Punji", "PunjiStake",
+    "CrowTrap", "SpringboardTrap",
+}
+
+local function isTrapObject(obj)
+    if not (obj:IsA("Model") or obj:IsA("BasePart")) then return false end
+    for _, name in ipairs(TRAP_NAMES) do
+        if obj.Name == name then return true end
+    end
+    if obj.Name:lower():find("trap") then return true end
+    return false
+end
+
+local function applyTrapHighlight(obj)
+    if not obj or not obj.Parent then return end
+    if trapHighlights[obj] and trapHighlights[obj].Parent then return end
+    local highlight = Instance.new("Highlight")
+    highlight.Name                = "HANGMA_TrapESP"
+    highlight.Adornee             = obj
+    highlight.FillColor           = ESPColors.Trap
+    highlight.OutlineColor        = ESPColors.Trap
+    highlight.FillTransparency    = 0.4
+    highlight.OutlineTransparency = 0
+    highlight.Enabled             = espPlayer
+    highlight.Parent              = obj
+    trapHighlights[obj]           = highlight
+end
+
+local function removeTrapHighlight(obj)
+    local h = trapHighlights[obj]
+    if h then pcall(function() h:Destroy() end) end
+    trapHighlights[obj] = nil
+end
+
+local function scanTraps()
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if isTrapObject(obj) then
+            applyTrapHighlight(obj)
+        end
+    end
+end
+
+local function setAllTrapEnabled(state)
+    for _, h in pairs(trapHighlights) do
+        if h and h.Parent then h.Enabled = state end
+    end
+end
+
+-- auto-detect trap baru muncul
+workspace.DescendantAdded:Connect(function(obj)
+    if espPlayer and isTrapObject(obj) then
+        task.wait(0.1)
+        applyTrapHighlight(obj)
+    end
+end)
+
+workspace.DescendantRemoving:Connect(function(obj)
+    if trapHighlights[obj] then
+        removeTrapHighlight(obj)
+    end
+end)
 
 -- ========================
 -- GUI SETUP
@@ -242,6 +317,7 @@ local C = {
     subtext   = Color3.fromRGB(120, 130, 160),
     off       = Color3.fromRGB(38,  42,  60),
     white     = Color3.fromRGB(255, 255, 255),
+    orange    = Color3.fromRGB(255, 160, 40),
 }
 
 local function addStroke(parent, color, thickness)
@@ -476,7 +552,7 @@ local function createTabFrame(name)
     f.ScrollBarThickness     = isMobile and 3 or 2
     f.ScrollBarImageColor3   = C.accent
     f.Visible                = false
-    f.CanvasSize             = UDim2.new(0, 0, 0, 1200)
+    f.CanvasSize             = UDim2.new(0, 0, 0, 1400)
     f.ScrollingEnabled       = true
     local pad = Instance.new("UIPadding")
     pad.Parent = f; pad.PaddingLeft = UDim.new(0, 10)
@@ -721,9 +797,25 @@ local TH = TOGGLE_H
 local GAP = TH + 8
 
 createSection(VisualFrame, "ESP PLAYER", 5)
-local updateESPPlayerUI = createToggle(VisualFrame, "👤", "Player Highlight", 30, cfg.espPlayer, function(v)
+
+-- info trap — label kecil di bawah section header
+local trapInfoCard = createCard(VisualFrame, 30, 28)
+local trapInfoLbl = Instance.new("TextLabel")
+trapInfoLbl.Parent = trapInfoCard; trapInfoLbl.BackgroundTransparency = 1
+trapInfoLbl.Position = UDim2.new(0, 10, 0, 0); trapInfoLbl.Size = UDim2.new(1, -10, 1, 0)
+trapInfoLbl.Font = Enum.Font.Gotham
+trapInfoLbl.Text = "🪤 ESP Trap Butcher aktif otomatis dengan Player"
+trapInfoLbl.TextColor3 = C.orange; trapInfoLbl.TextSize = isMobile and 10 or 10
+trapInfoLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local updateESPPlayerUI = createToggle(VisualFrame, "👤", "Player + Trap Highlight", 66, cfg.espPlayer, function(v)
     espPlayer = v; saveAll()
-    if not v then
+    -- trap ikut espPlayer
+    if v then
+        scanTraps()
+        setAllTrapEnabled(true)
+    else
+        setAllTrapEnabled(false)
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
                 local h = p.Character:FindFirstChild("H")
@@ -736,8 +828,8 @@ local updateESPPlayerUI = createToggle(VisualFrame, "👤", "Player Highlight", 
     end
 end)
 
-createSection(VisualFrame, "ESP OBJEK", 30 + GAP + 8)
-local objBase = 30 + GAP + 8 + 28
+createSection(VisualFrame, "ESP OBJEK", 66 + GAP + 8)
+local objBase = 66 + GAP + 8 + 28
 
 local updateESPPalletUI = createToggle(VisualFrame, "🪵", "Pallet",     objBase + GAP*0, cfg.espPallet,    function(v) espPallet    = v; saveAll() end)
 local updateESPWindowUI = createToggle(VisualFrame, "🪟", "Window",     objBase + GAP*1, cfg.espWindow,    function(v) espWindow    = v; saveAll() end)
@@ -770,6 +862,8 @@ local function doReset()
     skillcheckEnabled = false; skillcheckNotPerfectEnabled = false
     targetFOV = 100
     saveAll()
+    -- clear trap highlights
+    for obj in pairs(trapHighlights) do removeTrapHighlight(obj) end
     updateESPPlayerUI(false); updateESPPalletUI(false); updateESPWindowUI(false)
     updateESPHookUI(false); updateESPGenUI(false); updateESPGateUI(false)
     updateFOVUI(false); updateCrosshairUI(false)
@@ -883,12 +977,14 @@ local function updateGeneratorProgress(generator)
 end
 
 -- ========================
--- ESP — full object refresh
+-- ESP — full object refresh (termasuk trap)
 -- ========================
 local function RefreshObjectESP()
     ActiveGenerators = {}
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj.Name == "Window" then ApplyObjH(obj, ESPColors.Window, espWindow) end
+        -- scan trap sekalian di sini
+        if isTrapObject(obj) then applyTrapHighlight(obj) end
     end
     local Map = workspace:FindFirstChild("Map")
     if not Map then return end
@@ -909,10 +1005,12 @@ local function RefreshObjectESP()
             ApplyObjH(obj, ESPColors.Gate, espGate)
         end
     end
+    -- sync enabled state trap dengan espPlayer
+    setAllTrapEnabled(espPlayer)
 end
 
 -- ========================
--- ESP — player nametag + highlight + indicators
+-- ESP — player highlight + indicators
 -- ========================
 local function updatePlayerESP(player)
     if not player.Character then
@@ -929,12 +1027,12 @@ local function updatePlayerESP(player)
     local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
     if not rootPart then return end
 
-    local isKillerPlayer    = isKillerTeam(player)
+    local isKillerPlayer     = isKillerTeam(player)
     local selectedKillerAttr = GetGameValue(player, "SelectedKiller")
-    local rawMask           = GetGameValue(player, "Mask") or GetGameValue(player.Character, "Mask")
-    local isKnocked         = GetGameValue(player.Character, "Knocked")
-    local isHooked          = GetGameValue(player.Character, "IsHooked")
-    local isChased          = GetGameValue(player.Character, "IsChased")
+    local rawMask            = GetGameValue(player, "Mask") or GetGameValue(player.Character, "Mask")
+    local isKnocked          = GetGameValue(player.Character, "Knocked")
+    local isHooked           = GetGameValue(player.Character, "IsHooked")
+    local isChased           = GetGameValue(player.Character, "IsChased")
 
     local color
     if isKillerPlayer then
@@ -947,7 +1045,6 @@ local function updatePlayerESP(player)
         color = ESPColors.Survivor
     end
 
-    -- highlight
     local h = player.Character:FindFirstChild("H")
     if espPlayer then
         if not h then
@@ -997,7 +1094,6 @@ local function updatePlayerESP(player)
         return
     end
 
-    -- chased indicator
     local chasedLabel2D = IndicatorGui:FindFirstChild(player.Name .. "_Chased")
     if isChased then
         if not chasedLabel2D then
@@ -1023,7 +1119,6 @@ local function updatePlayerESP(player)
         if chasedLabel2D then chasedLabel2D:Destroy() end
     end
 
-    -- killer off-screen arrow
     local killerLabel2D = IndicatorGui:FindFirstChild(player.Name .. "_Killer")
     if isKillerPlayer then
         if not killerLabel2D then
@@ -1104,8 +1199,6 @@ function InitializeAutobuy()
         local line = check:WaitForChild("Line")
         local goal = check:WaitForChild("Goal")
         if HeartbeatConnection then HeartbeatConnection:Disconnect() end
-        -- Jangan memutus loop setelah satu perfect. King Source dapat memunculkan
-        -- beberapa skillcheck memakai objek Check yang sama.
         local wasInGoal = false
         HeartbeatConnection = RunService.Heartbeat:Connect(function()
             if not ScriptRunning then return end
@@ -1115,16 +1208,12 @@ function InitializeAutobuy()
                 return
             end
             if not line.Parent or not goal.Parent then return end
-
             local lr = line.Rotation % 360
             local gr = goal.Rotation % 360
-            -- Mengikuti logika PC: gunakan rentang area putih langsung.
             local gs = (gr + 104) % 360
             local ge = (gr + 114) % 360
             local inGoal = (gs > ge and (lr >= gs or lr <= ge))
                 or (lr >= gs and lr <= ge)
-
-            -- Satu input saat masuk zona; siap lagi setelah indikator keluar.
             if inGoal and not wasInGoal then
                 wasInGoal = true
                 TriggerMobileButton()
@@ -1171,7 +1260,6 @@ _MainHBConnection = RunService.Heartbeat:Connect(function()
         end
     end
 
-    -- killer nearby warning
     if myRoot then
         local warn = myRoot:FindFirstChild("KillerWarn")
         if espPlayer and killerNearby then
@@ -1191,7 +1279,6 @@ _MainHBConnection = RunService.Heartbeat:Connect(function()
         end
     end
 
-    -- generator progress update
     for i = #ActiveGenerators, 1, -1 do
         local g = ActiveGenerators[i]
         if g and g.Parent then
@@ -1228,5 +1315,7 @@ end)
 -- ========================
 SetupIndicatorGui()
 RefreshObjectESP()
+-- scan trap awal kalau espPlayer sudah aktif dari config
+if espPlayer then scanTraps() end
 InitializeAutobuy()
 showTab("HOME")
