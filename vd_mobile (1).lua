@@ -48,6 +48,7 @@ local defaultConfig = {
     espGate                 = false,
     crosshairEnabled        = false,
     fovEnabled              = false,
+    fullBrightEnabled       = false,
     skillcheckEnabled           = false,
     skillcheckNotPerfectEnabled = false,
     targetFOV               = 100,
@@ -89,12 +90,48 @@ local crosshairEnabled        = cfg.crosshairEnabled
 local fovEnabled              = cfg.fovEnabled
 local skillcheckEnabled           = cfg.skillcheckEnabled
 local skillcheckNotPerfectEnabled = cfg.skillcheckNotPerfectEnabled
+local fullBrightEnabled           = cfg.fullBrightEnabled == true
+
+-- Snapshot only the Lighting properties this feature changes. This lets the
+-- toggle and unload path restore the values that were present when the script started.
+local fullBrightValues = {
+    Brightness = 3,
+    ClockTime = 14,
+    FogEnd = 100000,
+    GlobalShadows = false,
+    Ambient = Color3.fromRGB(185, 185, 185),
+    OutdoorAmbient = Color3.fromRGB(185, 185, 185),
+    ExposureCompensation = 0.25,
+    EnvironmentDiffuseScale = 1,
+    EnvironmentSpecularScale = 1,
+}
+local originalLighting = {}
+for property in pairs(fullBrightValues) do
+    local ok, value = pcall(function() return Lighting[property] end)
+    if ok then originalLighting[property] = value end
+end
+
+local function applyFullBright(enabled)
+    for property, brightValue in pairs(fullBrightValues) do
+        local value = enabled and brightValue or originalLighting[property]
+        -- Lua's `and/or` idiom cannot represent false, so preserve GlobalShadows=false explicitly.
+        if enabled and property == "GlobalShadows" then value = false end
+        if value ~= nil then
+            pcall(function() Lighting[property] = value end)
+        end
+    end
+end
+
+if fullBrightEnabled then
+    applyFullBright(true)
+end
 
 local isMouseDown      = false
 local isRightMouseDown = false
 local hideMenuKey      = Enum.KeyCode.RightControl
 local targetFOV        = cfg.targetFOV or 100
 local defaultFOV       = Camera.FieldOfView
+local aimZoomActive    = false
 
 local function saveAll()
     saveConfig({
@@ -106,6 +143,7 @@ local function saveAll()
         espGate                 = espGate,
         crosshairEnabled        = crosshairEnabled,
         fovEnabled              = fovEnabled,
+        fullBrightEnabled       = fullBrightEnabled,
         skillcheckEnabled           = skillcheckEnabled,
         skillcheckNotPerfectEnabled = skillcheckNotPerfectEnabled,
         targetFOV               = targetFOV,
@@ -136,12 +174,17 @@ local IndicatorGui      = nil
 local ActiveGenerators  = {}
 local LastUpdateTick    = 0
 local LastESPRefresh    = 0
+local LastFullBrightApply = 0
 
 -- Trap ESP state
 local trapHighlights    = {}
 
 local function _doUnload()
     ScriptRunning = false
+    applyFullBright(false)
+    pcall(function()
+        if Camera and not aimZoomActive then Camera.FieldOfView = defaultFOV end
+    end)
     if HeartbeatConnection  then HeartbeatConnection:Disconnect();  HeartbeatConnection  = nil end
     if VisibilityConnection then VisibilityConnection:Disconnect(); VisibilityConnection = nil end
     if _RenderConnection    then _RenderConnection:Disconnect();    _RenderConnection    = nil end
@@ -306,6 +349,7 @@ ScreenGui.IgnoreGuiInset = true
 
 -- External image URLs are resolved to executor custom assets when supported.
 -- If the executor blocks downloads, the text fallback remains visible and the UI still works.
+local MENU_LOGO_URL = "https://i.ibb.co.com/HDxwfDRR/photo-2026-11-20-21-51-15.jpg"
 local MINIMIZED_LOGO_URL = "https://i.ibb.co.com/PZyLNGKh/photo-2026-11-20-21-51-11.jpg"
 local function resolveCustomImage(url, filename)
     local getAsset = getcustomasset or getsynasset
@@ -328,24 +372,25 @@ local function resolveCustomImage(url, filename)
 end
 
 local C = {
-    bg        = Color3.fromRGB(5,   5,   5),
-    panel     = Color3.fromRGB(12,  12,  12),
-    card      = Color3.fromRGB(20,  20,  20),
-    border    = Color3.fromRGB(245, 245, 245),
-    accent    = Color3.fromRGB(255, 255, 255),
-    accentDim = Color3.fromRGB(58,  58,  58),
-    red       = Color3.fromRGB(235, 235, 235),
-    green     = Color3.fromRGB(255, 255, 255),
-    text      = Color3.fromRGB(255, 255, 255),
-    subtext   = Color3.fromRGB(160, 160, 160),
-    off       = Color3.fromRGB(42,  42,  42),
-    white     = Color3.fromRGB(255, 255, 255),
-    orange    = Color3.fromRGB(220, 220, 220),
-    on        = Color3.fromRGB(48, 205, 112),
+    -- Palet charcoal dengan aksen abu-biru yang lebih redup.
+    bg        = Color3.fromRGB(8,   9,   12),
+    panel     = Color3.fromRGB(14,  16,  20),
+    card      = Color3.fromRGB(23,  26,  32),
+    border    = Color3.fromRGB(58,  68,  78),
+    accent    = Color3.fromRGB(112, 184, 172),
+    accentDim = Color3.fromRGB(31,  51,  54),
+    red       = Color3.fromRGB(205, 112, 120),
+    green     = Color3.fromRGB(143, 190, 154),
+    text      = Color3.fromRGB(232, 235, 240),
+    subtext   = Color3.fromRGB(145, 152, 164),
+    off       = Color3.fromRGB(48,  53,  63),
+    white     = Color3.fromRGB(235, 238, 243),
+    orange    = Color3.fromRGB(198, 157, 105),
+    on        = Color3.fromRGB(58,  145, 118),
 }
 
-local FONT_BRAND = Enum.Font.Antique
-local FONT_HEAD  = Enum.Font.Antique
+local FONT_BRAND = Enum.Font.GothamBold
+local FONT_HEAD  = Enum.Font.GothamMedium
 local FONT_BODY  = Enum.Font.Gotham
 
 local function addStroke(parent, color, thickness)
@@ -374,16 +419,16 @@ end
 local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(390, 800)
 local FRAME_W = isMobile and math.min(430, math.max(320, viewport.X - 24)) or 520
 local FRAME_H = isMobile and math.min(360, math.max(280, math.floor(viewport.Y * 0.45))) or 360
-local SIDE_W  = isMobile and 104 or 128
+local SIDE_W  = isMobile and 112 or 136
 
-local TOGGLE_H  = isMobile and 76 or 64
-local TOGGLE_W  = isMobile and 62 or 68
-local TOGGLE_SH = isMobile and 29 or 30
-local TOGGLE_CR = isMobile and 15 or 15
-local CIRCLE_SZ = isMobile and 21 or 22
-local CIRCLE_CR = isMobile and 11 or 11
-local ICON_SZ   = isMobile and 18 or 16
-local LABEL_SZ  = isMobile and 13 or 13
+local TOGGLE_H  = isMobile and 58 or 52
+local TOGGLE_W  = isMobile and 50 or 54
+local TOGGLE_SH = 23
+local TOGGLE_CR = 12
+local CIRCLE_SZ = isMobile and 18 or 18
+local CIRCLE_CR = 9
+local ICON_SZ   = isMobile and 16 or 15
+local LABEL_SZ  = isMobile and 12 or 12
 
 -- ========================
 -- MAIN FRAME
@@ -399,8 +444,9 @@ MainFrame.Active            = true
 MainFrame.Draggable         = not isMobile
 MainFrame.ClipsDescendants  = true
 addCorner(MainFrame, 12)
-addStroke(MainFrame, C.border, 1.5)
-addGradient(MainFrame, Color3.fromRGB(18, 18, 18), Color3.fromRGB(5, 5, 5), 90)
+local mainStroke = addStroke(MainFrame, C.border, 1.25)
+mainStroke.Transparency = 0.18
+addGradient(MainFrame, Color3.fromRGB(20, 23, 29), Color3.fromRGB(8, 9, 12), 90)
 
 -- ========================
 -- SIDEBAR
@@ -411,18 +457,36 @@ Sidebar.Parent           = MainFrame
 Sidebar.BackgroundColor3 = C.panel
 Sidebar.BorderSizePixel  = 0
 Sidebar.Size             = UDim2.new(0, SIDE_W, 1, 0)
-addStroke(Sidebar, C.border, 1)
+local sidebarStroke = addStroke(Sidebar, C.border, 1)
+sidebarStroke.Transparency = 0.35
 
 local Logo = Instance.new("TextLabel")
 Logo.Parent                 = Sidebar
 Logo.BackgroundTransparency = 1
-Logo.Position               = UDim2.new(0, 4, 0, 58)
+Logo.Position               = UDim2.new(0, 4, 0, 59)
 Logo.Size                   = UDim2.new(1, -8, 0, 22)
 Logo.Font                   = FONT_BRAND
 Logo.Text                   = "CUKY PUQY"
 Logo.TextColor3             = C.accent
 Logo.TextSize               = isMobile and 12 or 18
 Logo.TextXAlignment         = Enum.TextXAlignment.Center
+
+local MenuLogo = Instance.new("ImageLabel")
+MenuLogo.Name = "MenuLogo"
+MenuLogo.Parent = Sidebar
+MenuLogo.BackgroundColor3 = C.card
+MenuLogo.BorderSizePixel = 0
+MenuLogo.ImageColor3 = C.white
+MenuLogo.Position = UDim2.new(0.5, -24, 0, 8)
+MenuLogo.Size = UDim2.new(0, 48, 0, 48)
+MenuLogo.ScaleType = Enum.ScaleType.Crop
+MenuLogo.ZIndex = 3
+addCorner(MenuLogo, 24)
+local menuAsset = resolveCustomImage(MENU_LOGO_URL, "menu_v2")
+if menuAsset then
+    MenuLogo.Image = menuAsset
+end
+
 local TabContainer = Instance.new("Frame")
 TabContainer.Parent                 = Sidebar
 TabContainer.BackgroundTransparency = 1
@@ -431,8 +495,8 @@ SearchBox.Name = "SearchFeature"
 SearchBox.Parent = Sidebar
 SearchBox.BackgroundColor3 = C.card
 SearchBox.BorderSizePixel = 0
-SearchBox.Position = UDim2.new(0, 8, 0, 88)
-SearchBox.Size = UDim2.new(1, -16, 0, 25)
+SearchBox.Position = UDim2.new(0, 9, 0, 91)
+SearchBox.Size = UDim2.new(1, -18, 0, 30)
 SearchBox.Font = Enum.Font.Gotham
 SearchBox.Text = ""
 SearchBox.PlaceholderText = "Search feature..."
@@ -442,13 +506,21 @@ SearchBox.TextSize = 9
 SearchBox.ClearTextOnFocus = false
 SearchBox.ZIndex = 4
 addCorner(SearchBox, 5)
-local searchStroke = addStroke(SearchBox, C.border, 1); searchStroke.Transparency = 0.25
+local searchStroke = addStroke(SearchBox, C.border, 1); searchStroke.Transparency = 0.45
 
-TabContainer.Position               = UDim2.new(0, 7, 0, 122)
-TabContainer.Size                   = UDim2.new(1, -14, 1, -130)
+local SidebarDivider = Instance.new("Frame")
+SidebarDivider.Name = "SidebarDivider"
+SidebarDivider.Parent = Sidebar
+SidebarDivider.BackgroundColor3 = C.border
+SidebarDivider.BorderSizePixel = 0
+SidebarDivider.Position = UDim2.new(0, 10, 0, 82)
+SidebarDivider.Size = UDim2.new(1, -20, 0, 1)
+
+TabContainer.Position               = UDim2.new(0, 9, 0, 128)
+TabContainer.Size                   = UDim2.new(1, -18, 1, -136)
 local TabListLayout = Instance.new("UIListLayout")
 TabListLayout.Parent  = TabContainer
-TabListLayout.Padding = UDim.new(0, 7)
+TabListLayout.Padding = UDim.new(0, 8)
 
 -- ========================
 -- CONTENT AREA
@@ -634,8 +706,11 @@ local function createTabFrame(name)
     f.AutomaticCanvasSize     = Enum.AutomaticSize.Y
     f.ScrollingEnabled       = true
     local pad = Instance.new("UIPadding")
-    pad.Parent = f; pad.PaddingLeft = UDim.new(0, 10)
-    pad.PaddingRight = UDim.new(0, 10); pad.PaddingTop = UDim.new(0, 10)
+    pad.Parent = f
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
+    pad.PaddingTop = UDim.new(0, 12)
+    pad.PaddingBottom = UDim.new(0, 14)
     return f
 end
 
@@ -657,27 +732,40 @@ for _, t in pairs(tabs) do
     local btn = Instance.new("TextButton")
     btn.Parent           = TabContainer
     btn.BackgroundColor3 = C.card
-    btn.Size             = UDim2.new(1, 0, 0, isMobile and 42 or 38)
-    btn.Font             = FONT_HEAD
+    btn.Size             = UDim2.new(1, 0, 0, isMobile and 38 or 36)
+    btn.Font             = Enum.Font.GothamMedium
     btn.Text             = t.name
     btn.TextColor3       = C.subtext
     btn.TextSize         = isMobile and 10 or 11
-    btn.TextStrokeTransparency = 0.65
+    btn.TextStrokeTransparency = 1
     btn.AutoButtonColor  = false
-    addCorner(btn, 9); local tabStroke = addStroke(btn, C.white, 1.25); tabStroke.Transparency = 0.12
+    addCorner(btn, 9)
+    local tabStroke = addStroke(btn, C.border, 1)
+    tabStroke.Transparency = 0.42
     local function onTab()
         showTab(t.name)
         for _, other in pairs(TabContainer:GetChildren()) do
             if other:IsA("TextButton") then
-                other.TextColor3 = C.subtext; other.BackgroundColor3 = C.card
+                other.TextColor3 = C.subtext
+                other.BackgroundColor3 = C.card
+                local otherStroke = other:FindFirstChildOfClass("UIStroke")
+                if otherStroke then
+                    otherStroke.Color = C.border
+                    otherStroke.Transparency = 0.42
+                end
             end
         end
-        btn.TextColor3 = C.white; btn.BackgroundColor3 = C.accentDim
+        btn.TextColor3 = C.white
+        btn.BackgroundColor3 = C.accentDim
+        tabStroke.Color = C.accent
+        tabStroke.Transparency = 0.12
     end
     btn.Activated:Connect(onTab)
     if t.name == "SURVIVOR" then
         btn.TextColor3 = C.white
         btn.BackgroundColor3 = C.accentDim
+        tabStroke.Color = C.accent
+        tabStroke.Transparency = 0.12
     end
 end
 
@@ -690,10 +778,10 @@ local function createCard(parent, yOffset, height)
     card.BorderSizePixel = 0
     card.Position = UDim2.new(0, 0, 0, yOffset)
     card.Size = UDim2.new(1, 0, 0, height)
-    addCorner(card, isMobile and 16 or 14)
-    local cardStroke = addStroke(card, C.white, isMobile and 1.5 or 1.7)
-    cardStroke.Transparency = 0
-    addGradient(card, Color3.fromRGB(34, 34, 34), Color3.fromRGB(10, 10, 10), 90)
+    addCorner(card, isMobile and 13 or 12)
+    local cardStroke = addStroke(card, C.border, 1)
+    cardStroke.Transparency = 0.18
+    addGradient(card, Color3.fromRGB(27, 31, 38), Color3.fromRGB(19, 22, 28), 90)
     return card
 end
 
@@ -706,20 +794,30 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
 
     local iconLbl = Instance.new("TextLabel")
     iconLbl.Parent = card; iconLbl.BackgroundTransparency = 1
-    iconLbl.Position = UDim2.new(0, 14, 0, 0); iconLbl.Size = UDim2.new(0, 28, 1, 0)
-    iconLbl.Font = FONT_HEAD; iconLbl.Text = icon
-    iconLbl.TextColor3 = C.accentDim; iconLbl.TextSize = ICON_SZ
+    iconLbl.Position = UDim2.new(0, 10, 0, 0); iconLbl.Size = UDim2.new(0, 28, 1, 0)
+    iconLbl.Font = Enum.Font.GothamBold
+    iconLbl.Text = icon
+    iconLbl.TextColor3 = C.subtext
+    iconLbl.TextSize = ICON_SZ
+    iconLbl.TextXAlignment = Enum.TextXAlignment.Center
+    iconLbl.TextYAlignment = Enum.TextYAlignment.Center
 
     local label = Instance.new("TextLabel")
     label.Parent = card; label.BackgroundTransparency = 1
-    label.Position = UDim2.new(0, 50, 0, 0); label.Size = UDim2.new(0.58, 0, 1, 0)
-    label.Font = FONT_BODY; label.Text = text; label.TextWrapped = false; label.TextTruncate = Enum.TextTruncate.AtEnd
-    label.TextColor3 = C.text; label.TextSize = LABEL_SZ
+    label.Position = UDim2.new(0, 44, 0, 0)
+    label.Size = UDim2.new(1, -(TOGGLE_W + 66), 1, 0)
+    label.Font = Enum.Font.GothamMedium
+    label.Text = text
+    label.TextWrapped = false
+    label.TextTruncate = Enum.TextTruncate.AtEnd
+    label.TextColor3 = C.text
+    label.TextSize = LABEL_SZ
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Center
 
     local switchBg = Instance.new("Frame")
     switchBg.Parent = card; switchBg.BackgroundColor3 = default and C.on or C.off
-    switchBg.Position = UDim2.new(1, -(TOGGLE_W + 12), 0.28, -(TOGGLE_SH / 2))
+    switchBg.Position = UDim2.new(1, -(TOGGLE_W + 12), 0.5, -(TOGGLE_SH / 2))
     switchBg.Size = UDim2.new(0, TOGGLE_W, 0, TOGGLE_SH)
     switchBg.ZIndex = 3; addCorner(switchBg, TOGGLE_CR)
 
@@ -733,12 +831,16 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
 
     local badge = Instance.new("TextLabel")
     badge.Parent = card; badge.BackgroundTransparency = 1
-    badge.Position = UDim2.new(1, -(TOGGLE_W + 12), 1, -16)
-    badge.Size = UDim2.new(0, TOGGLE_W, 0, 14)
+    badge.Position = UDim2.new(1, -(TOGGLE_W + 12), 1, -15)
+    badge.Size = UDim2.new(0, TOGGLE_W, 0, 12)
+    badge.Visible = false
     badge.Font = FONT_HEAD
     badge.Text = default and "ON" or "OFF"
     badge.TextColor3 = default and C.on or C.subtext
-    badge.TextSize = isMobile and 11 or 10; badge.ZIndex = 4
+    badge.TextSize = isMobile and 10 or 9
+    badge.TextXAlignment = Enum.TextXAlignment.Center
+    badge.TextYAlignment = Enum.TextYAlignment.Center
+    badge.ZIndex = 4
 
     local state = default
     local function toggle()
@@ -795,13 +897,14 @@ local function createSection(parent, text, yOffset)
     local lbl = Instance.new("TextLabel")
     lbl.Parent = parent; lbl.BackgroundTransparency = 1
     lbl.Position = UDim2.new(0, 4, 0, yOffset); lbl.Size = UDim2.new(1, -8, 0, 22)
-    lbl.Font = FONT_HEAD; lbl.Text = text
-    lbl.TextColor3 = C.white; lbl.TextSize = isMobile and 12 or 13
+    lbl.Font = Enum.Font.GothamSemibold; lbl.Text = text
+    lbl.TextColor3 = C.accent; lbl.TextSize = isMobile and 11 or 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextYAlignment = Enum.TextYAlignment.Center
     local line = Instance.new("Frame")
     line.Parent = lbl; line.BackgroundColor3 = C.accent
-    line.Size = UDim2.new(1, 0, 0, 1); line.Position = UDim2.new(0, 0, 1, -2)
-    line.BorderSizePixel = 0; line.BackgroundTransparency = 0.6
+    line.Size = UDim2.new(0, 24, 0, 2); line.Position = UDim2.new(0, 0, 1, -1)
+    line.BorderSizePixel = 0; line.BackgroundTransparency = 0.18
 end
 
 -- ========================
@@ -809,7 +912,7 @@ end
 -- ========================
 local BannerCard = createCard(OthersFrame, 5, 80)
 BannerCard.BackgroundColor3 = C.panel
-addGradient(BannerCard, Color3.fromRGB(38, 38, 38), Color3.fromRGB(12, 12, 12), 135)
+addGradient(BannerCard, Color3.fromRGB(34, 39, 48), Color3.fromRGB(16, 18, 23), 135)
 local BannerTitle = Instance.new("TextLabel")
 BannerTitle.Parent = BannerCard; BannerTitle.BackgroundTransparency = 1
 BannerTitle.Position = UDim2.new(0, 14, 0, 8); BannerTitle.Size = UDim2.new(1, -14, 0, 30)
@@ -873,7 +976,7 @@ createSection(SurvivorFrame, "SKILLCHECK", 5)
 local updateSkillcheckUI = createToggle(SurvivorFrame, "✓", "Skillcheck Sempurna", 30, cfg.skillcheckEnabled, function(v)
     skillcheckEnabled = v; saveAll()
 end)
-local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Gen (Not Perfect)", 110, cfg.skillcheckNotPerfectEnabled, function(v)
+local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Gen (Not Perfect)", 30 + TOGGLE_H + 12, cfg.skillcheckNotPerfectEnabled, function(v)
     skillcheckNotPerfectEnabled = v; saveAll()
 end)
 
@@ -881,7 +984,7 @@ end)
 -- VISUAL TAB — ESP per kategori
 -- ========================
 local TH = TOGGLE_H
-local GAP = TH + 8
+local GAP = TH + 12
 
 createSection(ESPFrame, "ESP PLAYER", 5)
 
@@ -927,7 +1030,11 @@ local updateESPGateUI   = createToggle(ESPFrame, "E", "Gate",       objBase + GA
 local fovBase = objBase + GAP*5 + 16
 createSection(ESPFrame, "FOV", fovBase)
 local updateFOVUI = createToggle(ESPFrame, "◎", "Pengubah FOV", fovBase + 28, cfg.fovEnabled, function(v)
-    fovEnabled = v; saveAll()
+    fovEnabled = v
+    if not v and not aimZoomActive then
+        pcall(function() Camera.FieldOfView = defaultFOV end)
+    end
+    saveAll()
 end)
 local fovInput = createLabelInput(ESPFrame, "F", "Target FOV:", tostring(cfg.targetFOV or 100), fovBase + 28 + GAP + 8, function(txt)
     targetFOV = tonumber(txt) or 100; saveAll()
@@ -939,21 +1046,33 @@ local updateCrosshairUI = createToggle(ESPFrame, "+", "Custom Crosshair", xhBase
     crosshairEnabled = v; saveAll()
 end)
 
+local lightBase = xhBase + 28 + GAP + 12
+createSection(ESPFrame, "PENCAHAYAAN", lightBase)
+local updateFullBrightUI = createToggle(ESPFrame, "☼", "Full Bright", lightBase + 28, fullBrightEnabled, function(v)
+    fullBrightEnabled = v
+    applyFullBright(v)
+    saveAll()
+end)
+
 -- ========================
 -- RESET CONFIG
 -- ========================
 local function doReset()
     espPlayer = false; espPallet = false; espWindow = false
     espHook = false; espGenerator = false; espGate = false
-    crosshairEnabled = false; fovEnabled = false
+    if not aimZoomActive then
+        pcall(function() Camera.FieldOfView = defaultFOV end)
+    end
+    crosshairEnabled = false; fovEnabled = false; fullBrightEnabled = false
     skillcheckEnabled = false; skillcheckNotPerfectEnabled = false
     targetFOV = 100
+    applyFullBright(false)
     saveAll()
     -- clear trap highlights
     for obj in pairs(trapHighlights) do removeTrapHighlight(obj) end
     updateESPPlayerUI(false); updateESPPalletUI(false); updateESPWindowUI(false)
     updateESPHookUI(false); updateESPGenUI(false); updateESPGateUI(false)
-    updateFOVUI(false); updateCrosshairUI(false)
+    updateFOVUI(false); updateCrosshairUI(false); updateFullBrightUI(false)
     updateSkillcheckUI(false); updateSkillcheckNotPerfectUI(false)
     fovInput.Text = "100"
     cfgStatusLbl.Text = "CONFIG DIRESET"; cfgStatusLbl.TextColor3 = C.accent
@@ -1321,7 +1440,31 @@ end
 -- ========================
 _RenderConnection = RunService.RenderStepped:Connect(function()
     if not ScriptRunning then return end
-    Camera.FieldOfView   = fovEnabled and targetFOV or defaultFOV
+
+    -- Respect temporary camera zooms started by the game (for example, aim).
+    local currentFOV = Camera and Camera.FieldOfView
+    if currentFOV then
+        local normalFOV = fovEnabled and math.min(defaultFOV, targetFOV) or defaultFOV
+        if aimZoomActive then
+            if currentFOV >= normalFOV - 1 then
+                aimZoomActive = false
+            else
+                CrosshairGUI.Visible = crosshairEnabled and not isMobile
+                return
+            end
+        end
+
+        if currentFOV < normalFOV - 2 then
+            aimZoomActive = true
+        elseif fovEnabled then
+            if math.abs(currentFOV - targetFOV) > 0.05 then
+                Camera.FieldOfView = targetFOV
+            end
+        else
+            -- Track the game's normal FOV while the custom changer is off.
+            defaultFOV = currentFOV
+        end
+    end
     CrosshairGUI.Visible = crosshairEnabled and not isMobile
 end)
 
@@ -1334,6 +1477,11 @@ _MainHBConnection = RunService.Heartbeat:Connect(function()
     if now - LastESPRefresh > 5 then
         LastESPRefresh = now
         RefreshObjectESP()
+    end
+    -- Re-apply after map scripts or teleports replace the lighting values.
+    if fullBrightEnabled and now - LastFullBrightApply >= 0.5 then
+        LastFullBrightApply = now
+        applyFullBright(true)
     end
 
     local myChar  = LocalPlayer.Character
