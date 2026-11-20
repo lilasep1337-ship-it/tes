@@ -293,32 +293,60 @@ end)
 -- ========================
 -- GUI SETUP
 -- ========================
-if CoreGui:FindFirstChild("VD_V10_GUI") then
-    CoreGui:FindFirstChild("VD_V10_GUI"):Destroy()
+if CoreGui:FindFirstChild("CUKY_PUQY_GUI") then
+    CoreGui:FindFirstChild("CUKY_PUQY_GUI"):Destroy()
 end
 
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name           = "VD_V10_GUI"
+ScreenGui.Name           = "CUKY_PUQY_GUI"
 ScreenGui.Parent         = CoreGui
 ScreenGui.ResetOnSpawn   = false
 ScreenGui.DisplayOrder   = 999
 ScreenGui.IgnoreGuiInset = true
 
+-- External image URLs are resolved to executor custom assets when supported.
+-- If the executor blocks downloads, the text fallback remains visible and the UI still works.
+local MINIMIZED_LOGO_URL = "https://i.ibb.co.com/PZyLNGKh/photo-2026-11-20-21-51-11.jpg"
+local function resolveCustomImage(url, filename)
+    local getAsset = getcustomasset or getsynasset
+    local requestFn = request or http_request or (syn and syn.request)
+    if type(getAsset) ~= "function" or type(requestFn) ~= "function" or type(writefile) ~= "function" then
+        return nil
+    end
+    local path = "CUKY_PUQY_" .. filename .. ".jpg"
+    local okFile = pcall(function() return isfile(path) end)
+    if not okFile or not isfile(path) then
+        local okReq, response = pcall(function()
+            return requestFn({Url = url, Method = "GET"})
+        end)
+        if okReq and response and response.Body then
+            pcall(function() writefile(path, response.Body) end)
+        end
+    end
+    local okAsset, asset = pcall(function() return getAsset(path) end)
+    return okAsset and asset or nil
+end
+
 local C = {
-    bg        = Color3.fromRGB(10,  12,  18),
-    panel     = Color3.fromRGB(16,  18,  26),
-    card      = Color3.fromRGB(20,  23,  34),
-    border    = Color3.fromRGB(30,  34,  52),
-    accent    = Color3.fromRGB(0,   200, 255),
-    accentDim = Color3.fromRGB(0,   120, 160),
-    red       = Color3.fromRGB(255, 60,  80),
-    green     = Color3.fromRGB(0,   220, 140),
-    text      = Color3.fromRGB(220, 225, 240),
-    subtext   = Color3.fromRGB(120, 130, 160),
-    off       = Color3.fromRGB(38,  42,  60),
+    bg        = Color3.fromRGB(5,   5,   5),
+    panel     = Color3.fromRGB(12,  12,  12),
+    card      = Color3.fromRGB(20,  20,  20),
+    border    = Color3.fromRGB(245, 245, 245),
+    accent    = Color3.fromRGB(255, 255, 255),
+    accentDim = Color3.fromRGB(58,  58,  58),
+    red       = Color3.fromRGB(235, 235, 235),
+    green     = Color3.fromRGB(255, 255, 255),
+    text      = Color3.fromRGB(255, 255, 255),
+    subtext   = Color3.fromRGB(160, 160, 160),
+    off       = Color3.fromRGB(42,  42,  42),
     white     = Color3.fromRGB(255, 255, 255),
-    orange    = Color3.fromRGB(255, 160, 40),
+    orange    = Color3.fromRGB(220, 220, 220),
+    on        = Color3.fromRGB(48, 205, 112),
 }
+
+local FONT_BRAND = Enum.Font.Antique
+local FONT_HEAD  = Enum.Font.Antique
+local FONT_BODY  = Enum.Font.Gotham
 
 local function addStroke(parent, color, thickness)
     local s = Instance.new("UIStroke")
@@ -344,18 +372,18 @@ local function addGradient(parent, c0, c1, rotation)
 end
 
 local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(390, 800)
-local FRAME_W = isMobile and math.min(360, math.max(280, viewport.X - 16)) or 400
-local FRAME_H = isMobile and math.min(560, math.max(400, viewport.Y - 16)) or 500
-local SIDE_W  = isMobile and 112 or 120
+local FRAME_W = isMobile and math.min(430, math.max(320, viewport.X - 24)) or 520
+local FRAME_H = isMobile and math.min(360, math.max(280, math.floor(viewport.Y * 0.45))) or 360
+local SIDE_W  = isMobile and 104 or 128
 
-local TOGGLE_H  = isMobile and 72 or 42
-local TOGGLE_W  = isMobile and 68 or 44
-local TOGGLE_SH = isMobile and 38 or 26
-local TOGGLE_CR = isMobile and 19 or 13
-local CIRCLE_SZ = isMobile and 30 or 18
-local CIRCLE_CR = isMobile and 15 or 9
-local ICON_SZ   = isMobile and 21 or 14
-local LABEL_SZ  = isMobile and 14 or 13
+local TOGGLE_H  = isMobile and 76 or 64
+local TOGGLE_W  = isMobile and 62 or 68
+local TOGGLE_SH = isMobile and 29 or 30
+local TOGGLE_CR = isMobile and 15 or 15
+local CIRCLE_SZ = isMobile and 21 or 22
+local CIRCLE_CR = isMobile and 11 or 11
+local ICON_SZ   = isMobile and 18 or 16
+local LABEL_SZ  = isMobile and 13 or 13
 
 -- ========================
 -- MAIN FRAME
@@ -365,14 +393,14 @@ MainFrame.Name              = "MainFrame"
 MainFrame.Parent            = ScreenGui
 MainFrame.BackgroundColor3  = C.bg
 MainFrame.BorderSizePixel   = 0
-MainFrame.Position          = UDim2.new(0, 10, 0, 10)
+MainFrame.Position          = UDim2.new(0.5, -FRAME_W/2, 0.5, -FRAME_H/2)
 MainFrame.Size              = UDim2.new(0, FRAME_W, 0, FRAME_H)
 MainFrame.Active            = true
 MainFrame.Draggable         = not isMobile
 MainFrame.ClipsDescendants  = true
 addCorner(MainFrame, 12)
 addStroke(MainFrame, C.border, 1.5)
-addGradient(MainFrame, Color3.fromRGB(12, 14, 22), Color3.fromRGB(8, 10, 16), 135)
+addGradient(MainFrame, Color3.fromRGB(18, 18, 18), Color3.fromRGB(5, 5, 5), 90)
 
 -- ========================
 -- SIDEBAR
@@ -388,18 +416,36 @@ addStroke(Sidebar, C.border, 1)
 local Logo = Instance.new("TextLabel")
 Logo.Parent                 = Sidebar
 Logo.BackgroundTransparency = 1
-Logo.Position               = UDim2.new(0, 0, 0, 15)
-Logo.Size                   = UDim2.new(1, 0, 0, 30)
-Logo.Font                   = Enum.Font.GothamBlack
-Logo.Text                   = "HANGMA"
+Logo.Position               = UDim2.new(0, 4, 0, 58)
+Logo.Size                   = UDim2.new(1, -8, 0, 22)
+Logo.Font                   = FONT_BRAND
+Logo.Text                   = "CUKY PUQY"
 Logo.TextColor3             = C.accent
 Logo.TextSize               = isMobile and 12 or 18
-
+Logo.TextXAlignment         = Enum.TextXAlignment.Center
 local TabContainer = Instance.new("Frame")
 TabContainer.Parent                 = Sidebar
 TabContainer.BackgroundTransparency = 1
-TabContainer.Position               = UDim2.new(0, 6, 0, 58)
-TabContainer.Size                   = UDim2.new(1, -12, 1, -70)
+local SearchBox = Instance.new("TextBox")
+SearchBox.Name = "SearchFeature"
+SearchBox.Parent = Sidebar
+SearchBox.BackgroundColor3 = C.card
+SearchBox.BorderSizePixel = 0
+SearchBox.Position = UDim2.new(0, 8, 0, 88)
+SearchBox.Size = UDim2.new(1, -16, 0, 25)
+SearchBox.Font = Enum.Font.Gotham
+SearchBox.Text = ""
+SearchBox.PlaceholderText = "Search feature..."
+SearchBox.PlaceholderColor3 = C.subtext
+SearchBox.TextColor3 = C.white
+SearchBox.TextSize = 9
+SearchBox.ClearTextOnFocus = false
+SearchBox.ZIndex = 4
+addCorner(SearchBox, 5)
+local searchStroke = addStroke(SearchBox, C.border, 1); searchStroke.Transparency = 0.25
+
+TabContainer.Position               = UDim2.new(0, 7, 0, 122)
+TabContainer.Size                   = UDim2.new(1, -14, 1, -130)
 local TabListLayout = Instance.new("UIListLayout")
 TabListLayout.Parent  = TabContainer
 TabListLayout.Padding = UDim.new(0, 7)
@@ -411,8 +457,26 @@ local ContentArea = Instance.new("Frame")
 ContentArea.Name                   = "ContentArea"
 ContentArea.Parent                 = MainFrame
 ContentArea.BackgroundTransparency = 1
-ContentArea.Position               = UDim2.new(0, SIDE_W, 0, 0)
-ContentArea.Size                   = UDim2.new(1, -SIDE_W, 1, 0)
+ContentArea.Position               = UDim2.new(0, SIDE_W, 0, 34)
+ContentArea.Size                   = UDim2.new(1, -SIDE_W, 1, -34)
+
+local WindowTitle = Instance.new("TextLabel")
+WindowTitle.Name = "WindowTitle"
+WindowTitle.Parent = MainFrame
+WindowTitle.BackgroundTransparency = 1
+WindowTitle.Position = UDim2.new(0, SIDE_W + 12, 0, 5)
+WindowTitle.Size = UDim2.new(1, -(SIDE_W + 66), 0, 22)
+WindowTitle.Font = FONT_HEAD
+WindowTitle.Text = "CUKY PUQY"
+WindowTitle.TextColor3 = C.white
+WindowTitle.TextSize = isMobile and 13 or 14
+WindowTitle.TextXAlignment = Enum.TextXAlignment.Left
+local WindowLine = Instance.new("Frame")
+WindowLine.Parent = MainFrame
+WindowLine.BackgroundColor3 = C.border
+WindowLine.BorderSizePixel = 0
+WindowLine.Position = UDim2.new(0, SIDE_W + 12, 0, 31)
+WindowLine.Size = UDim2.new(1, -(SIDE_W + 24), 0, 1)
 
 -- ========================
 -- doMinimize
@@ -450,18 +514,32 @@ end
 CircleBtn = Instance.new("TextButton")
 CircleBtn.Name             = "CircleBtn"
 CircleBtn.Parent           = ScreenGui
-CircleBtn.BackgroundColor3 = C.accentDim
-CircleBtn.Position         = UDim2.new(0, 10, 0, 10)
+CircleBtn.BackgroundColor3 = C.bg
+CircleBtn.Position         = UDim2.new(0, 12, 0, 12)
 CircleBtn.Size             = UDim2.new(0, isMobile and 60 or 50, 0, isMobile and 60 or 50)
-CircleBtn.Font             = Enum.Font.GothamBlack
-CircleBtn.Text             = "H"
+CircleBtn.Font             = FONT_BRAND
+CircleBtn.Text             = "C"
 CircleBtn.TextColor3       = C.white
 CircleBtn.TextSize         = isMobile and 24 or 20
 CircleBtn.ZIndex           = 20
 CircleBtn.AutoButtonColor  = false
 CircleBtn.Visible          = false
 addCorner(CircleBtn, isMobile and 30 or 25)
-addStroke(CircleBtn, C.accent, 2)
+addStroke(CircleBtn, C.white, 2)
+local MinimizedLogo = Instance.new("ImageLabel")
+MinimizedLogo.Name = "ChromeHeartLogo"
+MinimizedLogo.Parent = CircleBtn
+MinimizedLogo.BackgroundTransparency = 1
+MinimizedLogo.Size = UDim2.new(1, -8, 1, -8)
+MinimizedLogo.Position = UDim2.new(0, 4, 0, 4)
+MinimizedLogo.ScaleType = Enum.ScaleType.Crop
+MinimizedLogo.ZIndex = 21
+local minimizedAsset = resolveCustomImage(MINIMIZED_LOGO_URL, "minimized")
+if minimizedAsset then
+    MinimizedLogo.Image = minimizedAsset
+    CircleBtn.Text = ""
+    addCorner(MinimizedLogo, isMobile and 26 or 21)
+end
 
 do
     local drag, dstart, dpos, didMove = false, nil, nil, false
@@ -499,17 +577,17 @@ end
 local MinBtn = Instance.new("TextButton")
 MinBtn.Name             = "MinBtn"
 MinBtn.Parent           = MainFrame
-MinBtn.BackgroundColor3 = C.accentDim
-MinBtn.Position         = UDim2.new(1, isMobile and -52 or -44, 0, 6)
-MinBtn.Size             = UDim2.new(0, isMobile and 44 or 36, 0, isMobile and 44 or 36)
-MinBtn.Font             = Enum.Font.GothamBlack
+MinBtn.BackgroundColor3 = C.bg
+MinBtn.Position         = UDim2.new(1, isMobile and -46 or -42, 0, 4)
+MinBtn.Size             = UDim2.new(0, isMobile and 40 or 36, 0, isMobile and 40 or 36)
+MinBtn.Font             = FONT_BRAND
 MinBtn.Text             = "−"
 MinBtn.TextColor3       = C.white
 MinBtn.TextSize         = 22
 MinBtn.ZIndex           = 15
 MinBtn.AutoButtonColor  = false
-addCorner(MinBtn, isMobile and 22 or 18)
-addStroke(MinBtn, C.accent, 1.5)
+addCorner(MinBtn, isMobile and 20 or 18)
+addStroke(MinBtn, C.white, 1.5)
 MinBtn.Activated:Connect(doMinimize)
 
 -- ========================
@@ -552,7 +630,8 @@ local function createTabFrame(name)
     f.ScrollBarThickness     = isMobile and 3 or 2
     f.ScrollBarImageColor3   = C.accent
     f.Visible                = false
-    f.CanvasSize             = UDim2.new(0, 0, 0, 1400)
+    f.CanvasSize             = UDim2.new(0, 0, 0, 0)
+    f.AutomaticCanvasSize     = Enum.AutomaticSize.Y
     f.ScrollingEnabled       = true
     local pad = Instance.new("UIPadding")
     pad.Parent = f; pad.PaddingLeft = UDim.new(0, 10)
@@ -560,14 +639,14 @@ local function createTabFrame(name)
     return f
 end
 
-local HomeFrame     = createTabFrame("Home")
+local OthersFrame   = createTabFrame("Others")
 local SurvivorFrame = createTabFrame("Survivor")
-local VisualFrame   = createTabFrame("Visual")
+local ESPFrame      = createTabFrame("ESP")
 
 local tabs = {
-    { name = "HOME",     frame = HomeFrame     },
     { name = "SURVIVOR", frame = SurvivorFrame },
-    { name = "VISUAL",   frame = VisualFrame   },
+    { name = "ESP",      frame = ESPFrame      },
+    { name = "LAINNYA",  frame = OthersFrame   },
 }
 
 local function showTab(name)
@@ -578,13 +657,14 @@ for _, t in pairs(tabs) do
     local btn = Instance.new("TextButton")
     btn.Parent           = TabContainer
     btn.BackgroundColor3 = C.card
-    btn.Size             = UDim2.new(1, 0, 0, isMobile and 56 or 36)
-    btn.Font             = Enum.Font.GothamBold
+    btn.Size             = UDim2.new(1, 0, 0, isMobile and 42 or 38)
+    btn.Font             = FONT_HEAD
     btn.Text             = t.name
     btn.TextColor3       = C.subtext
-    btn.TextSize         = isMobile and 11 or 11
+    btn.TextSize         = isMobile and 10 or 11
+    btn.TextStrokeTransparency = 0.65
     btn.AutoButtonColor  = false
-    addCorner(btn, 8); addStroke(btn, C.border, 1)
+    addCorner(btn, 9); local tabStroke = addStroke(btn, C.white, 1.25); tabStroke.Transparency = 0.12
     local function onTab()
         showTab(t.name)
         for _, other in pairs(TabContainer:GetChildren()) do
@@ -595,6 +675,10 @@ for _, t in pairs(tabs) do
         btn.TextColor3 = C.white; btn.BackgroundColor3 = C.accentDim
     end
     btn.Activated:Connect(onTab)
+    if t.name == "SURVIVOR" then
+        btn.TextColor3 = C.white
+        btn.BackgroundColor3 = C.accentDim
+    end
 end
 
 -- ========================
@@ -606,7 +690,10 @@ local function createCard(parent, yOffset, height)
     card.BorderSizePixel = 0
     card.Position = UDim2.new(0, 0, 0, yOffset)
     card.Size = UDim2.new(1, 0, 0, height)
-    addCorner(card, 8); addStroke(card, C.border, 1)
+    addCorner(card, isMobile and 16 or 14)
+    local cardStroke = addStroke(card, C.white, isMobile and 1.5 or 1.7)
+    cardStroke.Transparency = 0
+    addGradient(card, Color3.fromRGB(34, 34, 34), Color3.fromRGB(10, 10, 10), 90)
     return card
 end
 
@@ -619,20 +706,20 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
 
     local iconLbl = Instance.new("TextLabel")
     iconLbl.Parent = card; iconLbl.BackgroundTransparency = 1
-    iconLbl.Position = UDim2.new(0, 8, 0, 0); iconLbl.Size = UDim2.new(0, 24, 1, 0)
-    iconLbl.Font = Enum.Font.GothamBold; iconLbl.Text = icon
+    iconLbl.Position = UDim2.new(0, 14, 0, 0); iconLbl.Size = UDim2.new(0, 28, 1, 0)
+    iconLbl.Font = FONT_HEAD; iconLbl.Text = icon
     iconLbl.TextColor3 = C.accentDim; iconLbl.TextSize = ICON_SZ
 
     local label = Instance.new("TextLabel")
     label.Parent = card; label.BackgroundTransparency = 1
-    label.Position = UDim2.new(0, 38, 0, 0); label.Size = UDim2.new(0.50, 0, 1, 0)
-    label.Font = Enum.Font.Gotham; label.Text = text
+    label.Position = UDim2.new(0, 50, 0, 0); label.Size = UDim2.new(0.58, 0, 1, 0)
+    label.Font = FONT_BODY; label.Text = text; label.TextWrapped = false; label.TextTruncate = Enum.TextTruncate.AtEnd
     label.TextColor3 = C.text; label.TextSize = LABEL_SZ
     label.TextXAlignment = Enum.TextXAlignment.Left
 
     local switchBg = Instance.new("Frame")
-    switchBg.Parent = card; switchBg.BackgroundColor3 = default and C.accent or C.off
-    switchBg.Position = UDim2.new(1, -(TOGGLE_W + 10), 0.5, -(TOGGLE_SH / 2))
+    switchBg.Parent = card; switchBg.BackgroundColor3 = default and C.on or C.off
+    switchBg.Position = UDim2.new(1, -(TOGGLE_W + 12), 0.28, -(TOGGLE_SH / 2))
     switchBg.Size = UDim2.new(0, TOGGLE_W, 0, TOGGLE_SH)
     switchBg.ZIndex = 3; addCorner(switchBg, TOGGLE_CR)
 
@@ -648,24 +735,24 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     badge.Parent = card; badge.BackgroundTransparency = 1
     badge.Position = UDim2.new(1, -(TOGGLE_W + 12), 1, -16)
     badge.Size = UDim2.new(0, TOGGLE_W, 0, 14)
-    badge.Font = Enum.Font.GothamBold
+    badge.Font = FONT_HEAD
     badge.Text = default and "ON" or "OFF"
-    badge.TextColor3 = default and C.accent or C.subtext
-    badge.TextSize = isMobile and 10 or 9; badge.ZIndex = 4
+    badge.TextColor3 = default and C.on or C.subtext
+    badge.TextSize = isMobile and 11 or 10; badge.ZIndex = 4
 
     local state = default
     local function toggle()
         state = not state
-        switchBg.BackgroundColor3 = state and C.accent or C.off
+        switchBg.BackgroundColor3 = state and C.on or C.off
         badge.Text = state and "ON" or "OFF"
-        badge.TextColor3 = state and C.accent or C.subtext
+        badge.TextColor3 = state and C.on or C.subtext
         knob:TweenPosition(
             state and UDim2.new(1, -(CIRCLE_SZ + 4), 0.5, -(CIRCLE_SZ / 2))
                    or  UDim2.new(0, 4, 0.5, -(CIRCLE_SZ / 2)),
             "Out", "Quad", 0.15, true)
         local stroke = card:FindFirstChildOfClass("UIStroke")
         if stroke then
-            stroke.Color = state and C.accent or C.border
+            stroke.Color = state and C.on or C.border
             task.delay(0.3, function()
                 if stroke and stroke.Parent then stroke.Color = C.border end
             end)
@@ -675,9 +762,9 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     hitArea.Activated:Connect(toggle)
     return function(v)
         state = v
-        switchBg.BackgroundColor3 = state and C.accent or C.off
+        switchBg.BackgroundColor3 = state and C.on or C.off
         badge.Text = state and "ON" or "OFF"
-        badge.TextColor3 = state and C.accent or C.subtext
+        badge.TextColor3 = state and C.on or C.subtext
         knob.Position = state
             and UDim2.new(1, -(CIRCLE_SZ + 4), 0.5, -(CIRCLE_SZ / 2))
             or  UDim2.new(0, 4, 0.5, -(CIRCLE_SZ / 2))
@@ -689,14 +776,14 @@ local function createLabelInput(parent, icon, text, defaultVal, yOffset, callbac
     local label = Instance.new("TextLabel")
     label.Parent = card; label.BackgroundTransparency = 1
     label.Position = UDim2.new(0, 10, 0, 0); label.Size = UDim2.new(0.6, 0, 1, 0)
-    label.Font = Enum.Font.Gotham; label.Text = icon .. " " .. text
+    label.Font = FONT_BODY; label.Text = icon .. " " .. text
     label.TextColor3 = C.text; label.TextSize = isMobile and 12 or 13
     label.TextXAlignment = Enum.TextXAlignment.Left
     local input = Instance.new("TextBox")
     input.Parent = card; input.BackgroundColor3 = C.off
     input.Position = UDim2.new(1, -84, 0.5, -(isMobile and 18 or 13))
     input.Size = UDim2.new(0, isMobile and 70 or 64, 0, isMobile and 36 or 26)
-    input.Font = Enum.Font.GothamBold; input.Text = defaultVal
+    input.Font = FONT_HEAD; input.Text = defaultVal
     input.TextColor3 = C.white; input.TextSize = isMobile and 13 or 11
     input.ClearTextOnFocus = false
     addCorner(input, 6); addStroke(input, C.border, 1)
@@ -708,8 +795,8 @@ local function createSection(parent, text, yOffset)
     local lbl = Instance.new("TextLabel")
     lbl.Parent = parent; lbl.BackgroundTransparency = 1
     lbl.Position = UDim2.new(0, 4, 0, yOffset); lbl.Size = UDim2.new(1, -8, 0, 22)
-    lbl.Font = Enum.Font.GothamBold; lbl.Text = text
-    lbl.TextColor3 = C.accent; lbl.TextSize = 11
+    lbl.Font = FONT_HEAD; lbl.Text = text
+    lbl.TextColor3 = C.white; lbl.TextSize = isMobile and 12 or 13
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     local line = Instance.new("Frame")
     line.Parent = lbl; line.BackgroundColor3 = C.accent
@@ -720,62 +807,62 @@ end
 -- ========================
 -- HOME TAB
 -- ========================
-local BannerCard = createCard(HomeFrame, 5, 80)
+local BannerCard = createCard(OthersFrame, 5, 80)
 BannerCard.BackgroundColor3 = C.panel
-addGradient(BannerCard, Color3.fromRGB(0, 60, 80), Color3.fromRGB(12, 14, 22), 135)
+addGradient(BannerCard, Color3.fromRGB(38, 38, 38), Color3.fromRGB(12, 12, 12), 135)
 local BannerTitle = Instance.new("TextLabel")
 BannerTitle.Parent = BannerCard; BannerTitle.BackgroundTransparency = 1
 BannerTitle.Position = UDim2.new(0, 14, 0, 8); BannerTitle.Size = UDim2.new(1, -14, 0, 30)
-BannerTitle.Font = Enum.Font.GothamBlack; BannerTitle.Text = "BY CUQY PUQY"
+BannerTitle.Font = FONT_BRAND; BannerTitle.Text = "CUKY PUQY"
 BannerTitle.TextColor3 = C.accent; BannerTitle.TextSize = isMobile and 14 or 20
 BannerTitle.TextXAlignment = Enum.TextXAlignment.Left
 local BannerSub = Instance.new("TextLabel")
 BannerSub.Parent = BannerCard; BannerSub.BackgroundTransparency = 1
 BannerSub.Position = UDim2.new(0, 14, 0, 36); BannerSub.Size = UDim2.new(1, -14, 0, 18)
-BannerSub.Font = Enum.Font.Gotham; BannerSub.Text = "MENJADI HANGMA"
+BannerSub.Font = FONT_BODY; BannerSub.Text = "MOBILE DELTA UI"
 BannerSub.TextColor3 = C.subtext; BannerSub.TextSize = 11
 BannerSub.TextXAlignment = Enum.TextXAlignment.Left
 
-createSection(HomeFrame, "KEYBIND DEFAULT", 93)
+createSection(OthersFrame, "KONTROL MENU", 93)
 local keybinds = isMobile and {{ key = "CIRCLE", desc = "Buka / Tutup Menu" }}
     or {{ key = "R-CTRL", desc = "Sembunyikan / Tampilkan Menu" }}
 for i, kb in ipairs(keybinds) do
-    local kCard = createCard(HomeFrame, 118 + (i-1)*48, 40)
+    local kCard = createCard(OthersFrame, 118 + (i-1)*48, 40)
     local kLabel = Instance.new("TextLabel")
     kLabel.Parent = kCard; kLabel.BackgroundTransparency = 1
     kLabel.Position = UDim2.new(0, 10, 0, 0); kLabel.Size = UDim2.new(0.6, 0, 1, 0)
-    kLabel.Font = Enum.Font.Gotham; kLabel.Text = kb.desc
+    kLabel.Font = FONT_BODY; kLabel.Text = kb.desc
     kLabel.TextColor3 = C.text; kLabel.TextSize = 11
     kLabel.TextXAlignment = Enum.TextXAlignment.Left
     local kBadge = Instance.new("TextLabel")
     kBadge.Parent = kCard; kBadge.BackgroundColor3 = C.off
     kBadge.Position = UDim2.new(1, -84, 0.5, -11); kBadge.Size = UDim2.new(0, 74, 0, 22)
-    kBadge.Font = Enum.Font.GothamBold; kBadge.Text = kb.key
+    kBadge.Font = FONT_HEAD; kBadge.Text = kb.key
     kBadge.TextColor3 = C.accent; kBadge.TextSize = 9
     addCorner(kBadge, 4); addStroke(kBadge, C.border, 1)
 end
 
-createSection(HomeFrame, "CONFIG", 175)
-local cfgStatusCard = createCard(HomeFrame, 200, 40)
+createSection(OthersFrame, "AUTO SAVE CONFIG", 175)
+local cfgStatusCard = createCard(OthersFrame, 200, 40)
 local cfgStatusLbl = Instance.new("TextLabel")
 cfgStatusLbl.Parent = cfgStatusCard; cfgStatusLbl.BackgroundTransparency = 1
 cfgStatusLbl.Position = UDim2.new(0, 10, 0, 0); cfgStatusLbl.Size = UDim2.new(1, -10, 1, 0)
-cfgStatusLbl.Font = Enum.Font.Gotham; cfgStatusLbl.Text = "✓ Config loaded"
+cfgStatusLbl.Font = FONT_BODY; cfgStatusLbl.Text = "CONFIG TERSIMPAN OTOMATIS"
 cfgStatusLbl.TextColor3 = C.green; cfgStatusLbl.TextSize = 11
 cfgStatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
-local resetCard = createCard(HomeFrame, 248, 40)
+local resetCard = createCard(OthersFrame, 248, 40)
 local resetBtn = Instance.new("TextButton")
 resetBtn.Parent = resetCard; resetBtn.BackgroundTransparency = 1
-resetBtn.Size = UDim2.new(1, 0, 1, 0); resetBtn.Font = Enum.Font.GothamBold
-resetBtn.Text = "🗑  Reset Config"; resetBtn.TextColor3 = C.red
+resetBtn.Size = UDim2.new(1, 0, 1, 0); resetBtn.Font = FONT_HEAD
+resetBtn.Text = "RESET CONFIG"; resetBtn.TextColor3 = C.red
 resetBtn.TextSize = 11; resetBtn.AutoButtonColor = false
 
-local unloadCard = createCard(HomeFrame, 296, 40)
+local unloadCard = createCard(OthersFrame, 296, 40)
 local unloadBtn  = Instance.new("TextButton")
 unloadBtn.Parent = unloadCard; unloadBtn.BackgroundTransparency = 1
-unloadBtn.Size = UDim2.new(1, 0, 1, 0); unloadBtn.Font = Enum.Font.GothamBold
-unloadBtn.Text = "⏹  Unload Script"; unloadBtn.TextColor3 = C.red
+unloadBtn.Size = UDim2.new(1, 0, 1, 0); unloadBtn.Font = FONT_HEAD
+unloadBtn.Text = "UNLOAD SCRIPT"; unloadBtn.TextColor3 = C.red
 unloadBtn.TextSize = 11; unloadBtn.AutoButtonColor = false
 unloadBtn.Activated:Connect(_doUnload)
 
@@ -796,19 +883,19 @@ end)
 local TH = TOGGLE_H
 local GAP = TH + 8
 
-createSection(VisualFrame, "ESP PLAYER", 5)
+createSection(ESPFrame, "ESP PLAYER", 5)
 
 -- info trap — label kecil di bawah section header
-local trapInfoCard = createCard(VisualFrame, 30, 28)
+local trapInfoCard = createCard(ESPFrame, 30, 28)
 local trapInfoLbl = Instance.new("TextLabel")
 trapInfoLbl.Parent = trapInfoCard; trapInfoLbl.BackgroundTransparency = 1
 trapInfoLbl.Position = UDim2.new(0, 10, 0, 0); trapInfoLbl.Size = UDim2.new(1, -10, 1, 0)
 trapInfoLbl.Font = Enum.Font.Gotham
-trapInfoLbl.Text = "🪤 ESP Trap Butcher aktif otomatis dengan Player"
+trapInfoLbl.Text = "TRAP ESP OTOMATIS BERSAMA PLAYER"
 trapInfoLbl.TextColor3 = C.orange; trapInfoLbl.TextSize = isMobile and 10 or 10
 trapInfoLbl.TextXAlignment = Enum.TextXAlignment.Left
 
-local updateESPPlayerUI = createToggle(VisualFrame, "👤", "Player + Trap Highlight", 66, cfg.espPlayer, function(v)
+local updateESPPlayerUI = createToggle(ESPFrame, "P", "Player + Trap Highlight", 66, cfg.espPlayer, function(v)
     espPlayer = v; saveAll()
     -- trap ikut espPlayer
     if v then
@@ -828,27 +915,27 @@ local updateESPPlayerUI = createToggle(VisualFrame, "👤", "Player + Trap Highl
     end
 end)
 
-createSection(VisualFrame, "ESP OBJEK", 66 + GAP + 8)
+createSection(ESPFrame, "ESP OBJEK", 66 + GAP + 8)
 local objBase = 66 + GAP + 8 + 28
 
-local updateESPPalletUI = createToggle(VisualFrame, "🪵", "Pallet",     objBase + GAP*0, cfg.espPallet,    function(v) espPallet    = v; saveAll() end)
-local updateESPWindowUI = createToggle(VisualFrame, "🪟", "Window",     objBase + GAP*1, cfg.espWindow,    function(v) espWindow    = v; saveAll() end)
-local updateESPHookUI   = createToggle(VisualFrame, "🪝", "Hook",       objBase + GAP*2, cfg.espHook,      function(v) espHook      = v; saveAll() end)
-local updateESPGenUI    = createToggle(VisualFrame, "⚙", "Generator",  objBase + GAP*3, cfg.espGenerator, function(v) espGenerator = v; saveAll() end)
-local updateESPGateUI   = createToggle(VisualFrame, "🚪", "Gate",       objBase + GAP*4, cfg.espGate,      function(v) espGate      = v; saveAll() end)
+local updateESPPalletUI = createToggle(ESPFrame, "P", "Pallet",     objBase + GAP*0, cfg.espPallet,    function(v) espPallet    = v; saveAll() end)
+local updateESPWindowUI = createToggle(ESPFrame, "W", "Window",     objBase + GAP*1, cfg.espWindow,    function(v) espWindow    = v; saveAll() end)
+local updateESPHookUI   = createToggle(ESPFrame, "H", "Hook",       objBase + GAP*2, cfg.espHook,      function(v) espHook      = v; saveAll() end)
+local updateESPGenUI    = createToggle(ESPFrame, "G", "Generator",  objBase + GAP*3, cfg.espGenerator, function(v) espGenerator = v; saveAll() end)
+local updateESPGateUI   = createToggle(ESPFrame, "E", "Gate",       objBase + GAP*4, cfg.espGate,      function(v) espGate      = v; saveAll() end)
 
 local fovBase = objBase + GAP*5 + 16
-createSection(VisualFrame, "FOV", fovBase)
-local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", fovBase + 28, cfg.fovEnabled, function(v)
+createSection(ESPFrame, "FOV", fovBase)
+local updateFOVUI = createToggle(ESPFrame, "◎", "Pengubah FOV", fovBase + 28, cfg.fovEnabled, function(v)
     fovEnabled = v; saveAll()
 end)
-local fovInput = createLabelInput(VisualFrame, "👁", "Target FOV:", tostring(cfg.targetFOV or 100), fovBase + 28 + GAP + 8, function(txt)
+local fovInput = createLabelInput(ESPFrame, "F", "Target FOV:", tostring(cfg.targetFOV or 100), fovBase + 28 + GAP + 8, function(txt)
     targetFOV = tonumber(txt) or 100; saveAll()
 end)
 
 local xhBase = fovBase + 28 + GAP + 8 + (isMobile and 56 or 42) + 16
-createSection(VisualFrame, "CROSSHAIR", xhBase)
-local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", xhBase + 28, cfg.crosshairEnabled, function(v)
+createSection(ESPFrame, "CROSSHAIR", xhBase)
+local updateCrosshairUI = createToggle(ESPFrame, "+", "Custom Crosshair", xhBase + 28, cfg.crosshairEnabled, function(v)
     crosshairEnabled = v; saveAll()
 end)
 
@@ -869,9 +956,9 @@ local function doReset()
     updateFOVUI(false); updateCrosshairUI(false)
     updateSkillcheckUI(false); updateSkillcheckNotPerfectUI(false)
     fovInput.Text = "100"
-    cfgStatusLbl.Text = "✓ Config reset"; cfgStatusLbl.TextColor3 = C.accent
+    cfgStatusLbl.Text = "CONFIG DIRESET"; cfgStatusLbl.TextColor3 = C.accent
     task.delay(2, function()
-        cfgStatusLbl.Text = "✓ Config loaded"; cfgStatusLbl.TextColor3 = C.green
+        cfgStatusLbl.Text = "CONFIG TERSIMPAN OTOMATIS"; cfgStatusLbl.TextColor3 = C.green
     end)
 end
 resetBtn.Activated:Connect(doReset)
@@ -938,7 +1025,7 @@ local function CreateBillboardTag(text, color, size, textSize)
     lbl.Name = "BitchHook"; lbl.Size = UDim2.new(1, 0, 1, 0)
     lbl.BackgroundTransparency = 1; lbl.Text = text; lbl.TextColor3 = color
     lbl.TextStrokeTransparency = 0; lbl.TextStrokeColor3 = Color3.new(0,0,0)
-    lbl.Font = Enum.Font.GothamBold; lbl.TextSize = textSize or 10
+    lbl.Font = FONT_HEAD; lbl.TextSize = textSize or 10
     lbl.TextWrapped = true; lbl.RichText = true; lbl.Parent = bb
     return bb
 end
@@ -1100,7 +1187,7 @@ local function updatePlayerESP(player)
             chasedLabel2D = Instance.new("TextLabel", IndicatorGui)
             chasedLabel2D.Name = player.Name .. "_Chased"
             chasedLabel2D.BackgroundTransparency = 1
-            chasedLabel2D.Font = Enum.Font.GothamBold; chasedLabel2D.TextSize = 24
+            chasedLabel2D.Font = FONT_HEAD; chasedLabel2D.TextSize = 24
             chasedLabel2D.TextStrokeTransparency = 0; chasedLabel2D.AnchorPoint = Vector2.new(0.5, 0.5)
         end
         chasedLabel2D.Text = "!!"; chasedLabel2D.TextColor3 = color
@@ -1125,7 +1212,7 @@ local function updatePlayerESP(player)
             killerLabel2D = Instance.new("TextLabel", IndicatorGui)
             killerLabel2D.Name = player.Name .. "_Killer"
             killerLabel2D.BackgroundTransparency = 1
-            killerLabel2D.Font = Enum.Font.GothamBold; killerLabel2D.TextSize = 20
+            killerLabel2D.Font = FONT_HEAD; killerLabel2D.TextSize = 20
             killerLabel2D.TextStrokeTransparency = 0; killerLabel2D.Size = UDim2.new(0, 40, 0, 40)
             killerLabel2D.AnchorPoint = Vector2.new(0.5, 0.5)
         end
@@ -1183,11 +1270,16 @@ local function TriggerMobileButton()
         local p, s, i = b.AbsolutePosition, b.AbsoluteSize, GuiService:GetGuiInset()
         local cx = p.X + (s.X/2) + i.X
         local cy = p.Y + (s.Y/2) + i.Y
+        -- The overlay can sit above the game's mobile button. Temporarily disable
+        -- only this script's ScreenGui while sending the synthetic tap.
+        local wasEnabled = ScreenGui and ScreenGui.Enabled
+        if wasEnabled then ScreenGui.Enabled = false end
         pcall(function()
             VirtualInputManager:SendTouchEvent(TouchID, 0, cx, cy)
             task.wait(0.01)
             VirtualInputManager:SendTouchEvent(TouchID, 2, cx, cy)
         end)
+        if wasEnabled and ScreenGui then ScreenGui.Enabled = true end
     end
 end
 
@@ -1271,7 +1363,7 @@ _MainHBConnection = RunService.Heartbeat:Connect(function()
                 local lbl = Instance.new("TextLabel")
                 lbl.Size = UDim2.new(1, 0, 1, 0); lbl.BackgroundTransparency = 1
                 lbl.Text = "!"; lbl.TextColor3 = Color3.fromRGB(255, 0, 0)
-                lbl.TextStrokeTransparency = 0; lbl.Font = Enum.Font.GothamBold
+                lbl.TextStrokeTransparency = 0; lbl.Font = FONT_HEAD
                 lbl.TextSize = 40; lbl.Parent = bb
             end
         elseif warn then
@@ -1318,4 +1410,4 @@ RefreshObjectESP()
 -- scan trap awal kalau espPlayer sudah aktif dari config
 if espPlayer then scanTraps() end
 InitializeAutobuy()
-showTab("HOME")
+showTab("SURVIVOR")
