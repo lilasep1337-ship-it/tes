@@ -24,6 +24,8 @@ local Camera      = workspace.CurrentCamera
 local espEnabled        = false
 local crosshairEnabled  = false
 local fovEnabled        = false
+local fullBrightEnabled = false
+local aimZoomActive     = false
 local skillcheckEnabled = false
 local skillcheckNotPerfectEnabled = false
 local menuVisible       = true
@@ -63,6 +65,7 @@ local function saveConfig()
                 espGenerator = espGenerator,
                 crosshairEnabled = crosshairEnabled,
                 fovEnabled = fovEnabled,
+                fullBrightEnabled = fullBrightEnabled,
                 skillcheckEnabled = skillcheckEnabled,
                 skillcheckNotPerfectEnabled = skillcheckNotPerfectEnabled,
                 targetFOV = targetFOV,
@@ -75,9 +78,48 @@ Config = loadConfig()
 espEnabled = Config.espEnabled == true
 crosshairEnabled = Config.crosshairEnabled == true
 fovEnabled = Config.fovEnabled == true
+fullBrightEnabled = Config.fullBrightEnabled == true
 skillcheckEnabled = Config.skillcheckEnabled == true
 skillcheckNotPerfectEnabled = Config.skillcheckNotPerfectEnabled == true
 targetFOV = tonumber(Config.targetFOV) or 100
+
+-- Snapshot current Lighting values so Full Bright can restore them on reset.
+local fullBrightValues = {
+    Brightness = 3,
+    ClockTime = 14,
+    FogEnd = 100000,
+    GlobalShadows = false,
+    Ambient = Color3.fromRGB(185, 185, 185),
+    OutdoorAmbient = Color3.fromRGB(185, 185, 185),
+    ExposureCompensation = 0.25,
+    EnvironmentDiffuseScale = 1,
+    EnvironmentSpecularScale = 1,
+}
+local originalLighting = {}
+for property in pairs(fullBrightValues) do
+    local ok, value = pcall(function() return Lighting[property] end)
+    if ok then originalLighting[property] = value end
+end
+
+local function applyFullBright(enabled)
+    for property, brightValue in pairs(fullBrightValues) do
+        local value
+        if enabled then
+            value = brightValue
+        else
+            value = originalLighting[property]
+        end
+        if value ~= nil then
+            pcall(function() Lighting[property] = value end)
+        end
+    end
+end
+
+if fullBrightEnabled then
+    applyFullBright(true)
+end
+
+local lastFullBrightApply = 0
 
 -- Object ESP state
 espPallet = Config.espPallet == true
@@ -571,11 +613,25 @@ if espEnabled then scanTraps() end
 -- ========================
 
 createSection(VisualFrame, "FOV", 233)
-local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", 258, fovEnabled, function(v) fovEnabled = v; saveConfig() end)
+local updateFOVUI = createToggle(VisualFrame, "◎", "Pengubah FOV", 258, fovEnabled, function(v)
+    fovEnabled = v
+    if not v and not aimZoomActive then
+        pcall(function() Camera.FieldOfView = defaultFOV end)
+    end
+    saveConfig()
+end)
 local fovInput = createLabelInput(VisualFrame, "👁", "Target FOV:", tostring(targetFOV), 306, function(txt) targetFOV = tonumber(txt) or 100; saveConfig() end)
 
 createSection(VisualFrame, "CROSSHAIR", 361)
 local updateCrosshairUI = createToggle(VisualFrame, "⌖", "Custom Crosshair", 386, crosshairEnabled, function(v) crosshairEnabled = v; saveConfig() end)
+
+createSection(VisualFrame, "LIGHTING", 433)
+local updateFullBrightUI = createToggle(VisualFrame, "☼", "Full Bright", 458, fullBrightEnabled, function(v)
+    fullBrightEnabled = v
+    applyFullBright(v)
+    if v then lastFullBrightApply = tick() end
+    saveConfig()
+end)
 
 -- ========================
 -- LAINNYA: AUTO SAVE / RESET
@@ -838,21 +894,26 @@ local function resetConfig()
     espEnabled = false
     espPallet = false
     espGenerator = false
+    if not aimZoomActive then
+        pcall(function() Camera.FieldOfView = defaultFOV end)
+    end
     crosshairEnabled = false
     fovEnabled = false
+    fullBrightEnabled = false
     skillcheckEnabled = false
     skillcheckNotPerfectEnabled = false
     targetFOV = 100
+    applyFullBright(false)
 
     updateESPUI(false)
     updateESPPalletUI(false)
     updateESPGeneratorUI(false)
     updateFOVUI(false)
     updateCrosshairUI(false)
+    updateFullBrightUI(false)
     updateSkillcheckUI(false)
     updateSkillcheckNotPerfectUI(false)
     fovInput.Text = "100"
-    Camera.FieldOfView = defaultFOV
 
     for obj, highlight in pairs(objectHighlights) do
         pcall(function() highlight:Destroy() end)
@@ -930,10 +991,37 @@ end
 RunService.RenderStepped:Connect(function()
     pcall(doSkillcheck)
 
-    if fovEnabled then
-        Camera.FieldOfView = targetFOV
-    else
-        Camera.FieldOfView = defaultFOV
+    -- Leave short-term camera zooms (such as Twist of Fate aim zoom) to the game.
+    local currentFOV = Camera and Camera.FieldOfView
+    if currentFOV then
+        local normalFOV = fovEnabled and math.min(defaultFOV, targetFOV) or defaultFOV
+        local gameOwnsFOV = false
+        if aimZoomActive then
+            if currentFOV >= normalFOV - 1 then
+                aimZoomActive = false
+            else
+                gameOwnsFOV = true
+            end
+        end
+
+        if not gameOwnsFOV then
+            if currentFOV < normalFOV - 2 then
+                aimZoomActive = true
+            elseif fovEnabled then
+                if math.abs(currentFOV - targetFOV) > 0.05 then
+                    Camera.FieldOfView = targetFOV
+                end
+            else
+                -- Follow the game's normal camera FOV while the custom changer is off.
+                defaultFOV = currentFOV
+            end
+        end
+    end
+
+    local now = tick()
+    if fullBrightEnabled and now - lastFullBrightApply >= 0.5 then
+        lastFullBrightApply = now
+        applyFullBright(true)
     end
 
     CrosshairGUI.Visible = crosshairEnabled
