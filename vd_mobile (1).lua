@@ -268,17 +268,17 @@ local function addGradient(parent, c0, c1, rotation)
 end
 
 local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(390, 800)
-local FRAME_W = isMobile and math.min(340, math.max(300, viewport.X - 20)) or 400
-local FRAME_H = isMobile and math.min(520, math.max(440, viewport.Y - 20)) or 500
-local SIDE_W  = isMobile and 100 or 120
+local FRAME_W = isMobile and math.min(360, math.max(280, viewport.X - 16)) or 400
+local FRAME_H = isMobile and math.min(560, math.max(400, viewport.Y - 16)) or 500
+local SIDE_W  = isMobile and 112 or 120
 
-local TOGGLE_H  = isMobile and 68 or 42
-local TOGGLE_W  = isMobile and 64 or 44
-local TOGGLE_SH = isMobile and 36 or 26
-local TOGGLE_CR = isMobile and 18 or 13
-local CIRCLE_SZ = isMobile and 28 or 18
-local CIRCLE_CR = isMobile and 14 or 9
-local ICON_SZ   = isMobile and 20 or 14
+local TOGGLE_H  = isMobile and 72 or 42
+local TOGGLE_W  = isMobile and 68 or 44
+local TOGGLE_SH = isMobile and 38 or 26
+local TOGGLE_CR = isMobile and 19 or 13
+local CIRCLE_SZ = isMobile and 30 or 18
+local CIRCLE_CR = isMobile and 15 or 9
+local ICON_SZ   = isMobile and 21 or 14
 local LABEL_SZ  = isMobile and 14 or 13
 
 -- ========================
@@ -322,11 +322,11 @@ Logo.TextSize               = isMobile and 12 or 18
 local TabContainer = Instance.new("Frame")
 TabContainer.Parent                 = Sidebar
 TabContainer.BackgroundTransparency = 1
-TabContainer.Position               = UDim2.new(0, 6, 0, 55)
-TabContainer.Size                   = UDim2.new(1, -12, 1, -65)
+TabContainer.Position               = UDim2.new(0, 6, 0, 58)
+TabContainer.Size                   = UDim2.new(1, -12, 1, -70)
 local TabListLayout = Instance.new("UIListLayout")
 TabListLayout.Parent  = TabContainer
-TabListLayout.Padding = UDim.new(0, 5)
+TabListLayout.Padding = UDim.new(0, 7)
 
 -- ========================
 -- CONTENT AREA
@@ -376,15 +376,15 @@ CircleBtn.Name             = "CircleBtn"
 CircleBtn.Parent           = ScreenGui
 CircleBtn.BackgroundColor3 = C.accentDim
 CircleBtn.Position         = UDim2.new(0, 10, 0, 10)
-CircleBtn.Size             = UDim2.new(0, 50, 0, 50)
+CircleBtn.Size             = UDim2.new(0, isMobile and 60 or 50, 0, isMobile and 60 or 50)
 CircleBtn.Font             = Enum.Font.GothamBlack
 CircleBtn.Text             = "H"
 CircleBtn.TextColor3       = C.white
-CircleBtn.TextSize         = 20
+CircleBtn.TextSize         = isMobile and 24 or 20
 CircleBtn.ZIndex           = 20
 CircleBtn.AutoButtonColor  = false
 CircleBtn.Visible          = false
-addCorner(CircleBtn, 25)
+addCorner(CircleBtn, isMobile and 30 or 25)
 addStroke(CircleBtn, C.accent, 2)
 
 do
@@ -502,11 +502,11 @@ for _, t in pairs(tabs) do
     local btn = Instance.new("TextButton")
     btn.Parent           = TabContainer
     btn.BackgroundColor3 = C.card
-    btn.Size             = UDim2.new(1, 0, 0, isMobile and 48 or 36)
+    btn.Size             = UDim2.new(1, 0, 0, isMobile and 56 or 36)
     btn.Font             = Enum.Font.GothamBold
     btn.Text             = t.name
     btn.TextColor3       = C.subtext
-    btn.TextSize         = isMobile and 10 or 11
+    btn.TextSize         = isMobile and 11 or 11
     btn.AutoButtonColor  = false
     addCorner(btn, 8); addStroke(btn, C.border, 1)
     local function onTab()
@@ -549,7 +549,7 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
 
     local label = Instance.new("TextLabel")
     label.Parent = card; label.BackgroundTransparency = 1
-    label.Position = UDim2.new(0, 36, 0, 0); label.Size = UDim2.new(0.48, 0, 1, 0)
+    label.Position = UDim2.new(0, 38, 0, 0); label.Size = UDim2.new(0.50, 0, 1, 0)
     label.Font = Enum.Font.Gotham; label.Text = text
     label.TextColor3 = C.text; label.TextSize = LABEL_SZ
     label.TextXAlignment = Enum.TextXAlignment.Left
@@ -575,7 +575,7 @@ local function createToggle(parent, icon, text, yOffset, default, callback)
     badge.Font = Enum.Font.GothamBold
     badge.Text = default and "ON" or "OFF"
     badge.TextColor3 = default and C.accent or C.subtext
-    badge.TextSize = 9; badge.ZIndex = 4
+    badge.TextSize = isMobile and 10 or 9; badge.ZIndex = 4
 
     local state = default
     local function toggle()
