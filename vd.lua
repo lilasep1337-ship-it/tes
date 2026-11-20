@@ -35,7 +35,6 @@ local targetFOV     = 100
 local defaultFOV    = Camera.FieldOfView
 local espPallet     = false
 local espGenerator  = false
-local espTrap       = false  -- NEW
 
 -- ========================
 -- AUTO SAVE / LOAD CONFIG
@@ -62,7 +61,6 @@ local function saveConfig()
                 espEnabled = espEnabled,
                 espPallet = espPallet,
                 espGenerator = espGenerator,
-                espTrap = espTrap,  -- NEW
                 crosshairEnabled = crosshairEnabled,
                 fovEnabled = fovEnabled,
                 skillcheckEnabled = skillcheckEnabled,
@@ -84,7 +82,6 @@ targetFOV = tonumber(Config.targetFOV) or 100
 -- Object ESP state
 espPallet = Config.espPallet == true
 espGenerator = Config.espGenerator == true
-espTrap = Config.espTrap == true  -- NEW
 local objectHighlights = {}
 local generatorBillboards = {}
 local lastObjectESPUpdate = 0
@@ -136,7 +133,7 @@ local C = {
     subtext   = Color3.fromRGB(120, 130, 160),
     off       = Color3.fromRGB(38,  42,  60),
     white     = Color3.fromRGB(255, 255, 255),
-    orange    = Color3.fromRGB(255, 160, 40),  -- NEW: warna trap
+    orange    = Color3.fromRGB(255, 160, 40),  -- warna trap
 }
 
 local function addStroke(parent, color, thickness)
@@ -444,15 +441,23 @@ local updateSkillcheckNotPerfectUI = createToggle(SurvivorFrame, "✗", "Auto Ge
 -- VISUAL TAB
 -- ========================
 createSection(VisualFrame, "ESP", 5)
-local updateESPUI = createToggle(VisualFrame, "👁", "ESP Highlight Aktif", 30, espEnabled, function(v)
+local updateESPUI = createToggle(VisualFrame, "👁", "ESP Player + Trap Butcher", 30, espEnabled, function(v)
     espEnabled = v
     saveConfig()
-    if not v then
+    if v then
+        -- aktifkan trap scan sekalian
+        scanTraps()
+    else
+        -- matikan highlight player
         for _, p in pairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
                 local h = p.Character:FindFirstChild("ESPHighlight")
                 if h then h.Enabled = false end
             end
+        end
+        -- matikan trap highlight
+        for obj in pairs(trapHighlights) do
+            removeTrapHighlight(obj)
         end
     end
 end)
@@ -537,7 +542,7 @@ local function removeTrapHighlight(obj)
 end
 
 local function scanTraps()
-    if not espTrap then return end
+    if not espEnabled then return end  -- ikut toggle ESP Player
     for _, obj in ipairs(workspace:GetDescendants()) do
         if isTrapObject(obj) then
             applyTrapHighlight(obj)
@@ -545,10 +550,10 @@ local function scanTraps()
     end
 end
 
--- Deteksi trap baru yang muncul
+-- Deteksi trap baru yang muncul (ikut espEnabled)
 workspace.DescendantAdded:Connect(function(obj)
-    if espTrap and isTrapObject(obj) then
-        task.wait(0.1) -- tunggu sebentar agar fully parented
+    if espEnabled and isTrapObject(obj) then
+        task.wait(0.1)
         applyTrapHighlight(obj)
     end
 end)
@@ -559,19 +564,8 @@ workspace.DescendantRemoving:Connect(function(obj)
     end
 end)
 
-local updateESPTrapUI = createToggle(VisualFrame, "🪤", "ESP Trap (Butcher)", 174, espTrap, function(v)
-    espTrap = v
-    saveConfig()
-    if v then
-        scanTraps()
-    else
-        for obj in pairs(trapHighlights) do
-            removeTrapHighlight(obj)
-        end
-    end
-end)
-
-if espTrap then scanTraps() end
+-- ESP Trap ikut espEnabled — scan saat init jika espEnabled sudah true
+if espEnabled then scanTraps() end
 -- ========================
 -- END ESP TRAP
 -- ========================
@@ -844,7 +838,6 @@ local function resetConfig()
     espEnabled = false
     espPallet = false
     espGenerator = false
-    espTrap = false  -- NEW
     crosshairEnabled = false
     fovEnabled = false
     skillcheckEnabled = false
@@ -854,7 +847,6 @@ local function resetConfig()
     updateESPUI(false)
     updateESPPalletUI(false)
     updateESPGeneratorUI(false)
-    updateESPTrapUI(false)  -- NEW
     updateFOVUI(false)
     updateCrosshairUI(false)
     updateSkillcheckUI(false)
@@ -870,7 +862,7 @@ local function resetConfig()
         pcall(function() billboard:Destroy() end)
         generatorBillboards[obj] = nil
     end
-    -- NEW: reset trap highlights
+    -- clear trap highlights
     for obj in pairs(trapHighlights) do
         removeTrapHighlight(obj)
     end
