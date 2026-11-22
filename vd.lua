@@ -839,8 +839,10 @@ local function updateAnimationArrowESP()
                 seen[player] = true
                 local state = animationArrowStates[player] or {}
                 if isArrowAnimationPlaying(character) then
-                    local look = root.CFrame.LookVector
-                    local direction = Vector3.new(look.X, 0, look.Z)
+                    local aimPart = character:FindFirstChild("Head")
+                        or character:FindFirstChild("UpperTorso")
+                        or root
+                    local direction = aimPart.CFrame.LookVector
                     if direction.Magnitude > 0.01 then
                         state.direction = direction.Unit
                     end
