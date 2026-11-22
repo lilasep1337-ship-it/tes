@@ -735,7 +735,7 @@ local function destroyAnimationArrowFolder()
     end
 end
 
-local function setAnimationArrowLine(player, root, direction)
+local function setAnimationArrowLine(player, root, direction, color)
     local line = animationArrowLines[player]
     if line and (not line.source.Parent or line.source ~= root) then
         clearAnimationArrowLine(player)
@@ -771,7 +771,7 @@ local function setAnimationArrowLine(player, root, direction)
         beam.Width1 = 0.08
         beam.LightEmission = 0.7
         beam.LightInfluence = 0
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+        beam.Color = ColorSequence.new(color or Color3.fromRGB(255, 255, 255))
         beam.Transparency = NumberSequence.new(0.08)
         beam.Enabled = false
         beam.Parent = animationArrowFolder
@@ -781,6 +781,7 @@ local function setAnimationArrowLine(player, root, direction)
 
     local startPosition = root.Position + Vector3.new(0, 1.2, 0)
     line.endpointPart.CFrame = CFrame.new(startPosition + direction * ARROW_LINE_LENGTH)
+    line.beam.Color = ColorSequence.new(color or Color3.fromRGB(255, 255, 255))
     line.beam.Enabled = true
 end
 
@@ -801,6 +802,26 @@ local function isArrowAnimationPlaying(character)
     return false
 end
 
+
+local function getAnimationArrowLineColor(shooter, root, direction)
+    local origin = root.Position + Vector3.new(0, 1.2, 0)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { shooter.Character, animationArrowFolder }
+    params.IgnoreWater = true
+
+    local result = workspace:Raycast(origin, direction * ARROW_LINE_LENGTH, params)
+    if result then
+        for _, targetPlayer in ipairs(Players:GetPlayers()) do
+            local targetCharacter = targetPlayer.Character
+            if targetPlayer ~= shooter and targetCharacter
+                and result.Instance:IsDescendantOf(targetCharacter) then
+                return Color3.fromRGB(255, 60, 80)
+            end
+        end
+    end
+    return Color3.fromRGB(255, 255, 255)
+end
 
 local function updateAnimationArrowESP()
     if not arrowVeilEnabled then
@@ -828,7 +849,8 @@ local function updateAnimationArrowESP()
                 end
 
                 if state.lastActive and now - state.lastActive <= ARROW_LINE_LINGER and state.direction then
-                    setAnimationArrowLine(player, root, state.direction)
+                    local lineColor = getAnimationArrowLineColor(player, root, state.direction)
+                    setAnimationArrowLine(player, root, state.direction, lineColor)
                 else
                     clearAnimationArrowLine(player)
                     animationArrowStates[player] = nil
