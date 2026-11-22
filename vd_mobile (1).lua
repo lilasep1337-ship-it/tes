@@ -41,6 +41,7 @@ local CONFIG_KEY = "HANGMA_V10_CONFIG"
 
 local defaultConfig = {
     espPlayer               = false,
+    arrowVeilEnabled        = false,
     espPallet               = false,
     espWindow               = false,
     espHook                 = false,
@@ -81,6 +82,7 @@ local cfg = loadConfig()
 -- STATE
 -- ========================
 local espPlayer               = cfg.espPlayer
+local arrowVeilEnabled        = cfg.arrowVeilEnabled == true
 local espPallet               = cfg.espPallet
 local espWindow               = cfg.espWindow
 local espHook                 = cfg.espHook
@@ -136,6 +138,7 @@ local aimZoomActive    = false
 local function saveAll()
     saveConfig({
         espPlayer               = espPlayer,
+        arrowVeilEnabled        = arrowVeilEnabled,
         espPallet               = espPallet,
         espWindow               = espWindow,
         espHook                 = espHook,
@@ -164,6 +167,122 @@ local _RenderConnection    = nil
 local _MainHBConnection    = nil
 local _AllConnections      = {}
 
+local ARROW_ANIMATION_IDS = {
+    ["77307334522729"] = true,
+    ["87436543050891"] = true,
+    ["79809716042968"] = true,
+    ["122765810542358"] = true,
+    ["101443662521580"] = true,
+    ["84404617997921"] = true,
+    ["88848807662765"] = true,
+    ["123809268724645"] = true,
+}
+
+local ARROW_LINE_LINGER = 2.5
+local ARROW_LINE_LENGTH = 60
+local ANIMATION_ARROW_FOLDER_NAME = "VD_AnimationArrowESP_Local"
+local animationArrowFolder = workspace:FindFirstChild(ANIMATION_ARROW_FOLDER_NAME)
+if animationArrowFolder then
+    pcall(function() animationArrowFolder:Destroy() end)
+end
+animationArrowFolder = Instance.new("Folder")
+animationArrowFolder.Name = ANIMATION_ARROW_FOLDER_NAME
+animationArrowFolder.Parent = workspace
+
+local animationArrowLines = {}
+local animationArrowStates = {}
+
+local function clearAnimationArrowLine(player)
+    local line = animationArrowLines[player]
+    if not line then return end
+    animationArrowLines[player] = nil
+    pcall(function() line.beam:Destroy() end)
+    pcall(function() line.origin:Destroy() end)
+    pcall(function() line.endpointPart:Destroy() end)
+end
+
+local function clearAllAnimationArrowLines()
+    for player in pairs(animationArrowLines) do
+        clearAnimationArrowLine(player)
+    end
+    animationArrowStates = {}
+end
+
+local function destroyAnimationArrowFolder()
+    clearAllAnimationArrowLines()
+    if animationArrowFolder then
+        pcall(function() animationArrowFolder:Destroy() end)
+        animationArrowFolder = nil
+    end
+end
+
+local function setAnimationArrowLine(player, root, direction)
+    local line = animationArrowLines[player]
+    if line and (not line.source.Parent or line.source ~= root) then
+        clearAnimationArrowLine(player)
+        line = nil
+    end
+    if not line then
+        local origin = Instance.new("Attachment")
+        origin.Name = "VD_AnimationArrowOrigin"
+        origin.Position = Vector3.new(0, 1.2, 0)
+        origin.Parent = root
+
+        local endpointPart = Instance.new("Part")
+        endpointPart.Name = "VD_AnimationArrowEndpoint"
+        endpointPart.Anchored = true
+        endpointPart.CanCollide = false
+        endpointPart.CanTouch = false
+        endpointPart.CanQuery = false
+        endpointPart.Transparency = 1
+        endpointPart.Size = Vector3.new(0.1, 0.1, 0.1)
+        endpointPart.CFrame = CFrame.new(root.Position)
+        endpointPart.Parent = animationArrowFolder
+
+        local endpoint = Instance.new("Attachment")
+        endpoint.Name = "VD_AnimationArrowEnd"
+        endpoint.Parent = endpointPart
+
+        local beam = Instance.new("Beam")
+        beam.Name = "VD_AnimationArrowLine"
+        beam.Attachment0 = origin
+        beam.Attachment1 = endpoint
+        beam.FaceCamera = true
+        beam.Width0 = 0.12
+        beam.Width1 = 0.08
+        beam.LightEmission = 0.7
+        beam.LightInfluence = 0
+        beam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+        beam.Transparency = NumberSequence.new(0.08)
+        beam.Enabled = false
+        beam.Parent = animationArrowFolder
+        line = { source = root, origin = origin, endpointPart = endpointPart, beam = beam }
+        animationArrowLines[player] = line
+    end
+
+    local startPosition = root.Position + Vector3.new(0, 1.2, 0)
+    line.endpointPart.CFrame = CFrame.new(startPosition + direction * ARROW_LINE_LENGTH)
+    line.beam.Enabled = true
+end
+
+local function isArrowAnimationPlaying(character)
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return false end
+
+    for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+        if track.IsPlaying and track.WeightCurrent > 0.05 then
+            local animation = track.Animation
+            local animationId = animation and string.match(tostring(animation.AnimationId), "%d+")
+            if animationId and ARROW_ANIMATION_IDS[animationId] then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+
 local function _trackConn(c)
     if c then table.insert(_AllConnections, c) end
     return c
@@ -187,6 +306,7 @@ local function _doUnload()
     end)
     if HeartbeatConnection  then HeartbeatConnection:Disconnect();  HeartbeatConnection  = nil end
     if VisibilityConnection then VisibilityConnection:Disconnect(); VisibilityConnection = nil end
+    destroyAnimationArrowFolder()
     if _RenderConnection    then _RenderConnection:Disconnect();    _RenderConnection    = nil end
     if _MainHBConnection    then _MainHBConnection:Disconnect();    _MainHBConnection    = nil end
     for _, c in ipairs(_AllConnections) do
@@ -210,6 +330,50 @@ local function isKillerTeam(player)
     local t = player.Team and player.Team.Name:lower() or ""
     return t:find("killer") ~= nil
 end
+
+local function updateAnimationArrowESP()
+    if not ScriptRunning or not arrowVeilEnabled then
+        clearAllAnimationArrowLines()
+        return
+    end
+
+    local now = tick()
+    local seen = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isKillerTeam(player) then
+            local character = player.Character
+            local root = character and character:FindFirstChild("HumanoidRootPart")
+            if root and root:IsA("BasePart") then
+                seen[player] = true
+                local state = animationArrowStates[player] or {}
+                if isArrowAnimationPlaying(character) then
+                    local look = root.CFrame.LookVector
+                    local direction = Vector3.new(look.X, 0, look.Z)
+                    if direction.Magnitude > 0.01 then
+                        state.direction = direction.Unit
+                    end
+                    state.lastActive = now
+                    animationArrowStates[player] = state
+                end
+
+                if state.lastActive and now - state.lastActive <= ARROW_LINE_LINGER and state.direction then
+                    setAnimationArrowLine(player, root, state.direction)
+                else
+                    clearAnimationArrowLine(player)
+                    animationArrowStates[player] = nil
+                end
+            end
+        end
+    end
+
+    for player in pairs(animationArrowLines) do
+        if not seen[player] then clearAnimationArrowLine(player) end
+    end
+    for player in pairs(animationArrowStates) do
+        if not seen[player] then animationArrowStates[player] = nil end
+    end
+end
+
 
 local function isOverFrame(frame)
     if not frame.Visible then return false end
@@ -1018,8 +1182,13 @@ local updateESPPlayerUI = createToggle(ESPFrame, "P", "Player + Trap Highlight",
     end
 end)
 
-createSection(ESPFrame, "ESP OBJEK", 66 + GAP + 8)
-local objBase = 66 + GAP + 8 + 28
+local updateArrowVeilUI = createToggle(ESPFrame, "↗", "Arah Veil/Hidden", 66 + GAP, arrowVeilEnabled, function(v)
+    arrowVeilEnabled = v
+    saveAll()
+end)
+
+createSection(ESPFrame, "ESP OBJEK", 66 + GAP*2 + 8)
+local objBase = 66 + GAP*2 + 8 + 28
 
 local updateESPPalletUI = createToggle(ESPFrame, "P", "Pallet",     objBase + GAP*0, cfg.espPallet,    function(v) espPallet    = v; saveAll() end)
 local updateESPWindowUI = createToggle(ESPFrame, "W", "Window",     objBase + GAP*1, cfg.espWindow,    function(v) espWindow    = v; saveAll() end)
@@ -1058,7 +1227,8 @@ end)
 -- RESET CONFIG
 -- ========================
 local function doReset()
-    espPlayer = false; espPallet = false; espWindow = false
+    espPlayer = false; arrowVeilEnabled = false; espPallet = false; espWindow = false
+    clearAllAnimationArrowLines()
     espHook = false; espGenerator = false; espGate = false
     if not aimZoomActive then
         pcall(function() Camera.FieldOfView = defaultFOV end)
@@ -1070,7 +1240,7 @@ local function doReset()
     saveAll()
     -- clear trap highlights
     for obj in pairs(trapHighlights) do removeTrapHighlight(obj) end
-    updateESPPlayerUI(false); updateESPPalletUI(false); updateESPWindowUI(false)
+    updateESPPlayerUI(false); updateArrowVeilUI(false); updateESPPalletUI(false); updateESPWindowUI(false)
     updateESPHookUI(false); updateESPGenUI(false); updateESPGateUI(false)
     updateFOVUI(false); updateCrosshairUI(false); updateFullBrightUI(false)
     updateSkillcheckUI(false); updateSkillcheckNotPerfectUI(false)
@@ -1366,6 +1536,8 @@ LocalPlayer.CharacterAdded:Connect(function()
 end)
 
 Players.PlayerRemoving:Connect(function(p)
+    clearAnimationArrowLine(p)
+    animationArrowStates[p] = nil
     if not IndicatorGui then return end
     for _, n in ipairs({p.Name.."_Chased", p.Name.."_Killer"}) do
         local obj = IndicatorGui:FindFirstChild(n) if obj then obj:Destroy() end
@@ -1499,6 +1671,7 @@ _MainHBConnection = RunService.Heartbeat:Connect(function()
             end
         end
     end
+    pcall(updateAnimationArrowESP)
 
     if myRoot then
         local warn = myRoot:FindFirstChild("KillerWarn")
