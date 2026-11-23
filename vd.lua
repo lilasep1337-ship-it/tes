@@ -446,12 +446,163 @@ BannerSub.TextColor3         = C.subtext
 BannerSub.TextSize           = 11
 BannerSub.TextXAlignment     = Enum.TextXAlignment.Left
 
-createSection(HomeFrame, "KEYBIND DEFAULT", 93)
+local KillerPopup = Instance.new("Frame")
+KillerPopup.Name = "KillerTypePopup"
+KillerPopup.Parent = ScreenGui
+KillerPopup.AnchorPoint = Vector2.new(1, 0)
+KillerPopup.Position = UDim2.new(1, -12, 0, 12)
+KillerPopup.Size = UDim2.new(0, 190, 0, 40)
+KillerPopup.BackgroundColor3 = C.panel
+KillerPopup.BorderSizePixel = 0
+KillerPopup.ZIndex = 50
+addCorner(KillerPopup, 8)
+local killerPopupStroke = addStroke(KillerPopup, C.red, 1.25)
+killerPopupStroke.Transparency = 0.1
+local KillerInfoLabel = Instance.new("TextLabel")
+KillerInfoLabel.Name = "KillerTypeLabel"
+KillerInfoLabel.Parent = KillerPopup
+KillerInfoLabel.BackgroundTransparency = 1
+KillerInfoLabel.Position = UDim2.new(0, 10, 0, 0)
+KillerInfoLabel.Size = UDim2.new(1, -20, 1, 0)
+KillerInfoLabel.Font = Enum.Font.GothamBold
+KillerInfoLabel.Text = "JENIS KILLER: MENCARI..."
+KillerInfoLabel.TextColor3 = C.subtext
+KillerInfoLabel.TextSize = 11
+KillerInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+KillerInfoLabel.TextTruncate = Enum.TextTruncate.AtEnd
+KillerInfoLabel.ZIndex = 51
+
+local function readStringAttribute(instance, names)
+    if not instance then return nil end
+    for _, name in ipairs(names) do
+        local value = instance:GetAttribute(name)
+        if type(value) == "string" and value ~= "" then
+            return value
+        end
+    end
+    return nil
+end
+
+local function getKillerType(player)
+    local typeNames = {
+        "SelectedKiller", "MorphedKiller", "KillerType", "KillerName",
+        "KillerCharacter", "CharacterName", "Archetype", "Class"
+    }
+    local character = player.Character
+
+    local value = readStringAttribute(player, typeNames)
+        or readStringAttribute(character, typeNames)
+    if value and value ~= "Killer" and value ~= "Slasher" then
+        return value
+    end
+
+    if character then
+        local characterName = character.Name
+        if characterName ~= player.Name and characterName ~= "Character" then
+            return characterName
+        end
+        for _, object in ipairs(character:GetChildren()) do
+            if object:IsA("Tool") and object.Name ~= "" then
+                return object.Name
+            end
+        end
+    end
+
+    for _, container in ipairs({ player, character }) do
+        if container then
+            for _, object in ipairs(container:GetDescendants()) do
+                if object:IsA("StringValue") then
+                    local lowerName = string.lower(object.Name)
+                    if lowerName:find("killer", 1, true)
+                        or lowerName:find("character", 1, true)
+                        or lowerName:find("class", 1, true) then
+                        if object.Value ~= "" and object.Value ~= "Killer" then
+                            return object.Value
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function isKillerRoleValue(value)
+    if type(value) ~= "string" then return false end
+    value = string.lower(value)
+    return value == "killer" or value == "slasher" or value == "traitor"
+        or value:find("killer", 1, true) ~= nil
+end
+
+local lastReplicatedKillerScan = 0
+local cachedReplicatedKillerType = nil
+local function getReplicatedKillerType()
+    local now = tick()
+    if now - lastReplicatedKillerScan < 2 then return cachedReplicatedKillerType end
+    lastReplicatedKillerScan = now
+    cachedReplicatedKillerType = nil
+    local valueNames = {
+        killertype = true, killername = true, killercharacter = true,
+        charactername = true, selectedkiller = true, morphedkiller = true,
+        killerclass = true, currentkiller = true,
+    }
+    local containers = { workspace, ReplicatedStorage, LocalPlayer, LocalPlayer:FindFirstChildOfClass("PlayerGui") }
+    for _, container in ipairs(containers) do
+        if container then
+            for _, object in ipairs(container:GetDescendants()) do
+                local objectName = string.lower(object.Name)
+                if object:IsA("StringValue") and valueNames[objectName] then
+                    local value = object.Value
+                    if value ~= "" and not isKillerRoleValue(value) then
+                        cachedReplicatedKillerType = value
+                        return cachedReplicatedKillerType
+                    end
+                end
+                local attributes = object:GetAttributes()
+                for attributeName, attributeValue in pairs(attributes) do
+                    local lowerName = string.lower(attributeName)
+                    if valueNames[lowerName] and type(attributeValue) == "string"
+                        and attributeValue ~= "" and not isKillerRoleValue(attributeValue) then
+                        cachedReplicatedKillerType = attributeValue
+                        return cachedReplicatedKillerType
+                    end
+                end
+            end
+        end
+    end
+    return cachedReplicatedKillerType
+end
+
+local function updateKillerInfo()
+    local found = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and isKiller(player) then
+            local killerType = getKillerType(player)
+            if killerType then
+                table.insert(found, killerType)
+            end
+        end
+    end
+    if #found == 0 then
+        local replicatedType = getReplicatedKillerType()
+        if replicatedType then table.insert(found, replicatedType) end
+    end
+    if #found > 0 then
+        KillerInfoLabel.Text = "JENIS KILLER: " .. table.concat(found, ", ")
+        KillerInfoLabel.TextColor3 = C.red
+    else
+        KillerInfoLabel.Text = "JENIS KILLER: BELUM TERUNGKAP"
+        KillerInfoLabel.TextColor3 = C.subtext
+    end
+end
+local lastKillerInfoUpdate = 0
+
+createSection(HomeFrame, "KEYBIND DEFAULT", 157)
 local keybinds = {
     { key = "R-CTRL", desc = "Sembunyikan / Tampilkan Menu" },
 }
 for i, kb in ipairs(keybinds) do
-    local kCard = createCard(HomeFrame, 118 + (i-1) * 48, 40)
+    local kCard = createCard(HomeFrame, 182 + (i-1) * 48, 40)
     local kLabel = Instance.new("TextLabel")
     kLabel.Parent             = kCard
     kLabel.BackgroundTransparency = 1
@@ -1367,6 +1518,10 @@ RunService.RenderStepped:Connect(function()
     end
 
     local now = tick()
+    if now - lastKillerInfoUpdate >= 0.5 then
+        lastKillerInfoUpdate = now
+        pcall(updateKillerInfo)
+    end
     if fullBrightEnabled and now - lastFullBrightApply >= 0.5 then
         lastFullBrightApply = now
         applyFullBright(true)
@@ -1426,5 +1581,6 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+updateKillerInfo()
 showTab("HOME")
 saveConfig()
