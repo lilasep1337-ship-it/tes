@@ -135,11 +135,15 @@ local lastObjectESPUpdate = 0
 -- UTILS
 -- ========================
 local function isKiller(player)
-    return player.Team and (
-        player.Team.Name == "Killer"  or
-        player.Team.Name == "Slasher" or
-        player.Team.Name == "Traitor"
-    )
+    local teamName = player.Team and string.lower(player.Team.Name) or ""
+    if teamName:find("killer", 1, true)
+        or teamName:find("slasher", 1, true)
+        or teamName:find("traitor", 1, true) then
+        return true
+    end
+    local character = player.Character
+    local morphed = character and character:GetAttribute("MorphedKiller")
+    return type(morphed) == "string" and morphed ~= ""
 end
 
 local function isMouseOverFrame(frame)
@@ -483,6 +487,22 @@ local function readStringAttribute(instance, names)
     return nil
 end
 
+local KnownKillerTypes = {
+    veil = "Veil",
+    butcher = "Butcher",
+    stalker = "Stalker",
+    masked = "Masked",
+    abysswalker = "Abysswalker",
+    hidden = "Hidden",
+    cure = "Cure",
+    jeff = "Jeff",
+}
+
+local function knownKillerType(value)
+    if type(value) ~= "string" then return nil end
+    return KnownKillerTypes[string.lower(value)]
+end
+
 local function getKillerType(player)
     local typeNames = {
         "SelectedKiller", "MorphedKiller", "KillerType", "KillerName",
@@ -496,6 +516,16 @@ local function getKillerType(player)
         return value
     end
 
+    for _, container in ipairs({ player, character }) do
+        if container then
+            local attributes = container:GetAttributes()
+            for _, attributeValue in pairs(attributes) do
+                local known = knownKillerType(attributeValue)
+                if known then return known end
+            end
+        end
+    end
+
     if character then
         local characterName = character.Name
         if characterName ~= player.Name and characterName ~= "Character" then
@@ -505,6 +535,10 @@ local function getKillerType(player)
             if object:IsA("Tool") and object.Name ~= "" then
                 return object.Name
             end
+        end
+        for _, object in ipairs(character:GetDescendants()) do
+            local known = knownKillerType(object.Name)
+            if known then return known end
         end
     end
 
@@ -595,7 +629,6 @@ local function updateKillerInfo()
         KillerInfoLabel.TextColor3 = C.subtext
     end
 end
-local lastKillerInfoUpdate = 0
 
 createSection(HomeFrame, "KEYBIND DEFAULT", 157)
 local keybinds = {
@@ -1518,10 +1551,6 @@ RunService.RenderStepped:Connect(function()
     end
 
     local now = tick()
-    if now - lastKillerInfoUpdate >= 0.5 then
-        lastKillerInfoUpdate = now
-        pcall(updateKillerInfo)
-    end
     if fullBrightEnabled and now - lastFullBrightApply >= 0.5 then
         lastFullBrightApply = now
         applyFullBright(true)
