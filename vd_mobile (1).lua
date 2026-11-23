@@ -216,6 +216,20 @@ local function destroyAnimationArrowFolder()
     end
 end
 
+local function getArrowSourcePosition(character, root)
+    local spearModel = character and character:FindFirstChild("Spear", true)
+    local handle = spearModel and spearModel:FindFirstChild("SpearHandle", true)
+    if handle and handle:IsA("BasePart") then return handle.Position end
+    if character then
+        for _, object in ipairs(character:GetDescendants()) do
+            if object:IsA("BasePart") and string.lower(object.Name) == "spearhandle" then
+                return object.Position
+            end
+        end
+    end
+    return root.Position + Vector3.new(0, 1.2, 0)
+end
+
 local function setAnimationArrowLine(player, root, direction, color)
     local line = animationArrowLines[player]
     if line and (not line.source.Parent or line.source ~= root) then
@@ -225,7 +239,7 @@ local function setAnimationArrowLine(player, root, direction, color)
     if not line then
         local origin = Instance.new("Attachment")
         origin.Name = "VD_AnimationArrowOrigin"
-        origin.Position = Vector3.new(0, 1.2, 0)
+        origin.Position = root.CFrame:PointToObjectSpace(getArrowSourcePosition(root.Parent, root))
         origin.Parent = root
 
         local endpointPart = Instance.new("Part")
@@ -260,7 +274,8 @@ local function setAnimationArrowLine(player, root, direction, color)
         animationArrowLines[player] = line
     end
 
-    local startPosition = root.Position + Vector3.new(0, 1.2, 0)
+    local startPosition = getArrowSourcePosition(root.Parent, root)
+    line.origin.Position = root.CFrame:PointToObjectSpace(startPosition)
     line.endpointPart.CFrame = CFrame.new(startPosition + direction * ARROW_LINE_LENGTH)
     line.beam.Color = ColorSequence.new(color or Color3.fromRGB(255, 255, 255))
     line.beam.Enabled = true
@@ -281,6 +296,145 @@ local function isArrowAnimationPlaying(character)
         end
     end
     return false
+end
+
+local SPEAR_PART_NAME_HINTS = { "spear", "trident", "lance", "javelin", "fork", "weapon", "hiddenweapon", "veilweapon" }
+local RIG_BODY_PART_NAMES = {
+    ["humanoidrootpart"] = true, ["head"] = true, ["torso"] = true,
+    ["uppertorso"] = true, ["lowertorso"] = true,
+    ["left arm"] = true, ["right arm"] = true, ["left leg"] = true, ["right leg"] = true,
+    ["leftupperarm"] = true, ["rightupperarm"] = true,
+    ["leftlowerarm"] = true, ["rightlowerarm"] = true,
+    ["lefthand"] = true, ["righthand"] = true,
+    ["leftupperleg"] = true, ["rightupperleg"] = true,
+    ["leftlowerleg"] = true, ["rightlowerleg"] = true,
+    ["leftfoot"] = true, ["rightfoot"] = true,
+}
+local spearPartsCache = setmetatable({}, { __mode = "k" })
+
+local function partHasSpearAncestor(part, character)
+    local node = part
+    while node and node ~= character do
+        local name = string.lower(node.Name)
+        for _, hint in ipairs(SPEAR_PART_NAME_HINTS) do
+            if string.find(name, hint, 1, true) then return true end
+        end
+        node = node.Parent
+    end
+    return false
+end
+
+local function partHasToolAncestor(part, character)
+    local node = part
+    while node and node ~= character do
+        if node:IsA("Tool") then return true end
+        node = node.Parent
+    end
+    return false
+end
+
+local function isLongThinPartNearHand(part, character)
+    local dimensions = { part.Size.X, part.Size.Y, part.Size.Z }
+    table.sort(dimensions)
+    if dimensions[3] < 3.2 or dimensions[3] / math.max(dimensions[1], 0.1) < 3 then
+        return false
+    end
+    local hand = character:FindFirstChild("RightHand")
+        or character:FindFirstChild("Right Arm")
+        or character:FindFirstChild("RightLowerArm")
+    return hand and (part.Position - hand.Position).Magnitude <= 8 or false
+end
+
+local function findSpearParts(character)
+    local now = tick()
+    local cached = spearPartsCache[character]
+    if cached and now < cached.expiresAt then
+        return cached.parts
+    end
+
+    local parts = {}
+    for _, obj in ipairs(character:GetDescendants()) do
+        if obj:IsA("BasePart") and not RIG_BODY_PART_NAMES[string.lower(obj.Name)] then
+            if partHasSpearAncestor(obj, character)
+                or partHasToolAncestor(obj, character)
+                or isLongThinPartNearHand(obj, character) then
+                table.insert(parts, obj)
+            end
+        end
+    end
+    spearPartsCache[character] = { parts = parts, expiresAt = now + 0.5 }
+    return parts
+end
+
+local function getLongAxis(part)
+    local size = part.Size
+    local dimensions = { size.X, size.Y, size.Z }
+    table.sort(dimensions)
+    if dimensions[3] / math.max(dimensions[1], 0.1) < 1.25 then
+        return part.CFrame.LookVector
+    end
+    if size.X >= size.Y and size.X >= size.Z then
+        return part.CFrame.RightVector
+    elseif size.Y >= size.X and size.Y >= size.Z then
+        return part.CFrame.UpVector
+    end
+    return part.CFrame.LookVector
+end
+
+local function orientWeaponVector(direction, character, root)
+    if direction.Magnitude < 0.01 then return nil end
+    direction = direction.Unit
+    local reference = root.CFrame.LookVector
+    if math.abs(direction:Dot(reference)) < 0.08 then
+        local head = character:FindFirstChild("Head") or character:FindFirstChild("UpperTorso")
+        if head then reference = head.CFrame.LookVector end
+    end
+    if direction:Dot(reference) < 0 then direction = -direction end
+    return direction
+end
+
+local function getSpearHandleDirection(handle, character, root)
+    local size = handle.Size
+    local axis, halfLength
+    if size.X >= size.Y and size.X >= size.Z then
+        axis, halfLength = handle.CFrame.RightVector, size.X * 0.5
+    elseif size.Y >= size.X and size.Y >= size.Z then
+        axis, halfLength = handle.CFrame.UpVector, size.Y * 0.5
+    else
+        axis, halfLength = handle.CFrame.LookVector, size.Z * 0.5
+    end
+
+    local hand = character:FindFirstChild("RightHand")
+        or character:FindFirstChild("Right Arm")
+        or character:FindFirstChild("RightLowerArm")
+    if hand then
+        local positiveEnd = handle.Position + axis * halfLength
+        local negativeEnd = handle.Position - axis * halfLength
+        local positiveDistance = (positiveEnd - hand.Position).Magnitude
+        local negativeDistance = (negativeEnd - hand.Position).Magnitude
+        if math.abs(positiveDistance - negativeDistance) > 0.1 then
+            -- On this rig, the visible spearhead is on the endpoint nearer the gripping hand.
+            local tipEnd = positiveDistance < negativeDistance and positiveEnd or negativeEnd
+            local direction = tipEnd - handle.Position
+            if direction.Magnitude > 0.01 then return direction.Unit end
+        end
+    end
+    return orientWeaponVector(axis, character, root)
+end
+
+local function getSpearDirection(character, root)
+    -- The beam starts at SpearHandle; its aim follows the killer's head in 3D.
+    local head = character:FindFirstChild("Head")
+    if head and head:IsA("BasePart") then
+        local direction = head.CFrame.LookVector
+        if direction.Magnitude > 0.01 then return direction.Unit end
+    end
+
+    local upperTorso = character:FindFirstChild("UpperTorso")
+    if upperTorso and upperTorso:IsA("BasePart") then
+        return upperTorso.CFrame.LookVector.Unit
+    end
+    return root.CFrame.LookVector.Unit
 end
 
 
@@ -333,7 +487,7 @@ local function isKillerTeam(player)
 end
 
 local function getAnimationArrowLineColor(shooter, root, direction)
-    local origin = root.Position + Vector3.new(0, 1.2, 0)
+    local origin = getArrowSourcePosition(shooter.Character, root)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.FilterDescendantsInstances = { shooter.Character, animationArrowFolder }
@@ -368,11 +522,8 @@ local function updateAnimationArrowESP()
                 seen[player] = true
                 local state = animationArrowStates[player] or {}
                 if isArrowAnimationPlaying(character) then
-                    local aimPart = character:FindFirstChild("Head")
-                        or character:FindFirstChild("UpperTorso")
-                        or root
-                    local direction = aimPart.CFrame.LookVector
-                    if direction.Magnitude > 0.01 then
+                    local direction = getSpearDirection(character, root)
+                    if direction and direction.Magnitude > 0.01 then
                         state.direction = direction.Unit
                     end
                     state.lastActive = now
